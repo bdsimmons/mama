@@ -60,6 +60,32 @@ func (u *ui) openTasks() []Task {
 	return t
 }
 
+// runAt starts the UI already inside a chapter's gap, on the writing surface.
+func runAt(root string, cs []Chapter, chapter, gap int) {
+	fd := int(os.Stdin.Fd())
+	if !term.IsTerminal(fd) {
+		fmt.Println("mama: not a terminal")
+		return
+	}
+	old, err := term.MakeRaw(fd)
+	if err != nil {
+		return
+	}
+	defer term.Restore(fd, old)
+	u := &ui{root: root}
+	u.reload()
+	if chapter < len(u.chaps) {
+		u.sel[tBook] = chapter
+		if gap < len(u.chaps[chapter].Gaps) {
+			u.inGaps, u.gsel = true, gap
+		}
+	}
+	fmt.Print("\x1b[?1049h")
+	defer fmt.Print("\x1b[?1049l")
+	u.write(fd)
+	u.loop(fd, old)
+}
+
 func run(root string, cs []Chapter) {
 	fd := int(os.Stdin.Fd())
 	if !term.IsTerminal(fd) {
@@ -76,10 +102,13 @@ func run(root string, cs []Chapter) {
 	u := &ui{root: root}
 	u.reload()
 
-	buf := make([]byte, 8)
 	fmt.Print("\x1b[?1049h")
 	defer fmt.Print("\x1b[?1049l")
+	u.loop(fd, old)
+}
 
+func (u *ui) loop(fd int, old *term.State) {
+	buf := make([]byte, 8)
 	for {
 		w, h, _ := term.GetSize(fd)
 		if w == 0 {

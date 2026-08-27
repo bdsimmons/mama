@@ -11,6 +11,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,19 +58,47 @@ var (
 	reEmph   = regexp.MustCompile(`[*_` + "`" + `]`)
 )
 
+// repoRoot finds the book. In order: MAMA_ROOT, then walking up from the
+// working directory, then walking up from the binary itself — so the program
+// works when launched from a menu or a bar widget, not only from inside a
+// checkout.
 func repoRoot() string {
-	d, _ := os.Getwd()
-	for {
-		if _, err := os.Stat(filepath.Join(d, "Makefile")); err == nil {
-			if _, err := os.Stat(filepath.Join(d, "yellow-mama")); err == nil {
-				return d
+	looksRight := func(d string) bool {
+		if _, err := os.Stat(filepath.Join(d, "Makefile")); err != nil {
+			return false
+		}
+		_, err := os.Stat(filepath.Join(d, "yellow-mama"))
+		return err == nil
+	}
+	climb := func(d string) (string, bool) {
+		for {
+			if looksRight(d) {
+				return d, true
+			}
+			p := filepath.Dir(d)
+			if p == d {
+				return "", false
+			}
+			d = p
+		}
+	}
+
+	if v := os.Getenv("MAMA_ROOT"); v != "" {
+		if looksRight(v) {
+			return v
+		}
+	}
+	if wd, err := os.Getwd(); err == nil {
+		if r, ok := climb(wd); ok {
+			return r
+		}
+	}
+	if exe, err := os.Executable(); err == nil {
+		if exe, err = filepath.EvalSymlinks(exe); err == nil {
+			if r, ok := climb(filepath.Dir(exe)); ok {
+				return r
 			}
 		}
-		p := filepath.Dir(d)
-		if p == d {
-			break
-		}
-		d = p
 	}
 	wd, _ := os.Getwd()
 	return wd
@@ -232,7 +261,46 @@ func main() {
 	root, cs := load()
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "goto":
+			// mama goto <chapter-substring> [gap#] — open the writing surface there
+			if len(os.Args) < 3 {
+				fmt.Println("usage: mama goto <chapter> [gap#]")
+				return
+			}
+			root2, cs2 := load()
+			gi := 0
+			if len(os.Args) > 3 {
+				gi, _ = strconv.Atoi(os.Args[3])
+			}
+			for i := range cs2 {
+				if strings.Contains(strings.ToLower(cs2[i].File), strings.ToLower(os.Args[2])) {
+					runAt(root2, cs2, i, gi)
+					return
+				}
+			}
+			fmt.Println("no chapter matching", os.Args[2])
+			return
 		case "gaps":
+			if len(os.Args) > 2 && os.Args[2] == "--json" {
+				fmt.Print("[")
+				first := true
+				for _, c := range cs {
+					for gi, gp := range c.Gaps {
+						if !first {
+							fmt.Print(",")
+						}
+						first = false
+						esc := func(x string) string {
+							b, _ := json.Marshal(x)
+							return string(b)
+						}
+						fmt.Printf(`{"chapter":%s,"file":%s,"gapIndex":%d,"line":%d,"kind":%s,"text":%s,"prose":%d,"target":%d}`,
+							esc(c.Title), esc(c.File), gi, gp.Line, esc(gp.Kind), esc(gp.Text), c.Prose, c.Target)
+					}
+				}
+				fmt.Println("]")
+				return
+			}
 			for _, c := range cs {
 				if len(c.Gaps) == 0 {
 					continue
