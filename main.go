@@ -1,251 +1,245 @@
 // mama — a lens over the manuscript.
 //
-// It stores nothing. Every fact it shows is read from the markdown files at
-// startup; there is no database, no state file, no second copy of anything.
-// Delete this program and the book is untouched. That is the point.
-//
-//	mama              interactive
-//	mama gaps         print every open gap
-//	mama status       one-line progress
+// It stores nothing. Every fact it shows is read from the markdown at startup;
+// there is no database and no second copy of the book. Delete this program and
+// the manuscript is untouched.
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"regexp"
-	"io"
-	"sort"
 	"strconv"
 	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/cobra"
 )
 
-type Gap struct {
-	Line  int    // 1-indexed line in the chapter file
-	Kind  string // GAP | PLAN
-	Text  string // first line, cleaned
-	Body  []string
-}
-
-type Chapter struct {
-	File     string // path relative to repo root
-	Num      int
-	Title    string
-	Act      string
-	Words    int // everything
-	Prose    int // excluding > blocks — the actual writing
-	Target   int
-	Gaps     []Gap
-	Planned  bool
-}
-
-func (c Chapter) Pct() float64 {
-	if c.Target == 0 {
-		return 0
-	}
-	return 100 * float64(c.Prose) / float64(c.Target)
-}
-
-var (
-	reBlock  = regexp.MustCompile(`^>\s?`)
-	// header may wrap across lines, so do not require the closing **
-	reGap    = regexp.MustCompile(`^>\s*\*\*(GAP|PLAN)\b[ —:-]*(.*)$`)
-	reH1     = regexp.MustCompile(`^#\s+(.*)$`)
-	reNum    = regexp.MustCompile(`^(\d+)-`)
-	reBudget = regexp.MustCompile(`^\|\s*(\d+)\s*\|[^|]*\|\s*([\d,]+)\s*\|`)
-	reEmph   = regexp.MustCompile(`[*_` + "`" + `]`)
-)
-
-// repoRoot finds the book. In order: MAMA_ROOT, then walking up from the
-// working directory, then walking up from the binary itself — so the program
-// works when launched from a menu or a bar widget, not only from inside a
-// checkout.
-func repoRoot() string {
-	looksRight := func(d string) bool {
-		if _, err := os.Stat(filepath.Join(d, "Makefile")); err != nil {
-			return false
-		}
-		_, err := os.Stat(filepath.Join(d, "yellow-mama"))
-		return err == nil
-	}
-	climb := func(d string) (string, bool) {
-		for {
-			if looksRight(d) {
-				return d, true
-			}
-			p := filepath.Dir(d)
-			if p == d {
-				return "", false
-			}
-			d = p
-		}
+func main() {
+	root := &cobra.Command{
+		Use:   "mama",
+		Short: "Navigate and write The Legacy of Yellow Mama",
+		Long: "mama is a lens over the manuscript. It reads the markdown, shows you\n" +
+			"where the book stands and what is still open, and gives you a place to\n" +
+			"write. It stores nothing of its own.",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, cs := load()
+			p := tea.NewProgram(newModel(r, cs), tea.WithAltScreen())
+			_, err := p.Run()
+			return err
+		},
 	}
 
-	if v := os.Getenv("MAMA_ROOT"); v != "" {
-		if looksRight(v) {
-			return v
-		}
-	}
-	if wd, err := os.Getwd(); err == nil {
-		if r, ok := climb(wd); ok {
-			return r
-		}
-	}
-	if exe, err := os.Executable(); err == nil {
-		if exe, err = filepath.EvalSymlinks(exe); err == nil {
-			if r, ok := climb(filepath.Dir(exe)); ok {
-				return r
-			}
-		}
-	}
-	wd, _ := os.Getwd()
-	return wd
-}
+	var jsonOut bool
 
-// budgets parses the per-chapter table in OUTLINE.md. If the table moves or
-// changes shape the tool degrades to target 0 rather than lying.
-func budgets(root string) map[int]int {
-	out := map[int]int{}
-	f, err := os.Open(filepath.Join(root, "yellow-mama", "OUTLINE.md"))
-	if err != nil {
-		return out
-	}
-	defer f.Close()
-	in := false
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		l := sc.Text()
-		if strings.Contains(l, "Per-chapter budget") {
-			in = true
-			continue
-		}
-		if !in {
-			continue
-		}
-		if m := reBudget.FindStringSubmatch(l); m != nil {
-			n, _ := strconv.Atoi(m[1])
-			t, _ := strconv.Atoi(strings.ReplaceAll(m[2], ",", ""))
-			out[n] = t
-		}
-		if strings.Contains(l, "**TOTAL**") {
-			break
-		}
-	}
-	return out
-}
-
-func order(root string) []string {
-	var files []string
-	f, err := os.Open(filepath.Join(root, "yellow-mama", "chapters.txt"))
-	if err != nil {
-		g, _ := filepath.Glob(filepath.Join(root, "yellow-mama", "[0-9][0-9]-*.md"))
-		sort.Strings(g)
-		for _, p := range g {
-			files = append(files, filepath.Join("yellow-mama", filepath.Base(p)))
-		}
-		return files
-	}
-	defer f.Close()
-	act := ""
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		l := strings.TrimSpace(sc.Text())
-		if strings.HasPrefix(l, "#") {
-			t := strings.TrimSpace(strings.TrimLeft(l, "# "))
-			if t != "" && strings.ToUpper(t) == t && !strings.Contains(t, ".md") {
-				act = t
-			}
-			continue
-		}
-		if l == "" {
-			continue
-		}
-		files = append(files, filepath.Join("yellow-mama", l)+"\x00"+act)
-	}
-	return files
-}
-
-func parse(root, rel, act string, budget map[int]int) Chapter {
-	c := Chapter{File: rel, Act: act}
-	if m := reNum.FindStringSubmatch(filepath.Base(rel)); m != nil {
-		c.Num, _ = strconv.Atoi(m[1])
-	}
-	c.Target = budget[c.Num]
-
-	b, err := os.ReadFile(filepath.Join(root, rel))
-	if err != nil {
-		c.Title = filepath.Base(rel) + "  (missing)"
-		return c
-	}
-	lines := strings.Split(string(b), "\n")
-	var cur *Gap
-	for i, l := range lines {
-		if c.Title == "" {
-			if m := reH1.FindStringSubmatch(l); m != nil {
-				c.Title = strings.TrimSpace(reEmph.ReplaceAllString(m[1], ""))
-			}
-		}
-		n := len(strings.Fields(l))
-		c.Words += n
-
-		if reBlock.MatchString(l) {
-			if m := reGap.FindStringSubmatch(l); m != nil {
-				if m[1] == "PLAN" {
-					c.Planned = true
-				}
-				txt := strings.TrimSpace(reEmph.ReplaceAllString(m[2], ""))
-				txt = strings.TrimLeft(txt, "— -")
-				c.Gaps = append(c.Gaps, Gap{Line: i + 1, Kind: m[1], Text: strings.TrimSpace(txt)})
-				cur = &c.Gaps[len(c.Gaps)-1]
-			} else if cur != nil {
-				t := strings.TrimSpace(reBlock.ReplaceAllString(l, ""))
-				if t != "" {
-					cur.Body = append(cur.Body, reEmph.ReplaceAllString(t, ""))
+	status := &cobra.Command{
+		Use:   "status",
+		Short: "One line: chapters, words against target, what is open",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, cs := load()
+			prose, target, gaps := totals(cs)
+			ts, docs, _ := scanAll(r, cs)
+			open := 0
+			for _, t := range ts {
+				if !t.Done {
+					open++
 				}
 			}
-			continue // block-quoted lines are scaffolding, not prose
-		}
-		cur = nil
-		if strings.HasPrefix(l, "#") || strings.HasPrefix(l, ":::") || strings.HasPrefix(l, "---") {
-			continue
-		}
-		c.Prose += n
+			arts := artifacts(r)
+			nd := 0
+			for _, a := range arts {
+				if a.Digitized != "yes" {
+					nd++
+				}
+			}
+			if jsonOut {
+				pct := 0.0
+				if target > 0 {
+					pct = 100 * float64(prose) / float64(target)
+				}
+				b, _ := json.Marshal(map[string]any{
+					"prose": prose, "target": target, "pct": pct, "gaps": gaps,
+					"tasks": open, "docs": len(docs), "artifacts": len(arts),
+					"undigitized": nd, "chapters": len(cs),
+				})
+				fmt.Println(string(b))
+				return nil
+			}
+			fmt.Printf("%d chapters · %s of %s words · %d gaps · %d tasks · %d research docs · %d artifacts\n",
+				len(cs), comma(prose), comma(target), gaps, open, len(docs), len(arts))
+			return nil
+		},
 	}
-	if c.Title == "" {
-		c.Title = filepath.Base(rel)
+	status.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
+
+	gapsCmd := &cobra.Command{
+		Use:   "gaps",
+		Short: "Every open GAP and PLAN, with file and line",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, cs := load()
+			if jsonOut {
+				type g struct {
+					Chapter  string `json:"chapter"`
+					File     string `json:"file"`
+					GapIndex int    `json:"gapIndex"`
+					Line     int    `json:"line"`
+					Kind     string `json:"kind"`
+					Text     string `json:"text"`
+					Prose    int    `json:"prose"`
+					Target   int    `json:"target"`
+				}
+				var out []g
+				for _, c := range cs {
+					for i, x := range c.Gaps {
+						out = append(out, g{c.Title, c.File, i, x.Line, x.Kind, x.Text, c.Prose, c.Target})
+					}
+				}
+				b, _ := json.Marshal(out)
+				fmt.Println(string(b))
+				return nil
+			}
+			for _, c := range cs {
+				if len(c.Gaps) == 0 {
+					continue
+				}
+				fmt.Printf("\n%s  (%s)\n", c.Title, c.File)
+				for _, x := range c.Gaps {
+					fmt.Printf("  %-4s L%-5d %s\n", x.Kind, x.Line, x.Text)
+				}
+			}
+			fmt.Println()
+			return nil
+		},
 	}
-	return c
+	gapsCmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
+
+	tasksCmd := &cobra.Command{
+		Use:   "tasks",
+		Short: `Every open "- [ ]" across the project`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, cs := load()
+			ts, _, _ := scanAll(r, cs)
+			last, n := "", 0
+			for _, t := range ts {
+				if t.Done {
+					continue
+				}
+				n++
+				if t.File != last {
+					last = t.File
+					fmt.Printf("\n%s\n", t.File)
+				}
+				fmt.Printf("  %-5d %s\n", t.Line, t.Text)
+			}
+			fmt.Printf("\n%d open\n", n)
+			return nil
+		},
+	}
+
+	findCmd := &cobra.Command{
+		Use:   "find <query>",
+		Short: "Search every markdown file in the project",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, cs := load()
+			_, _, lines := scanAll(r, cs)
+			for _, h := range search(lines, strings.Join(args, " ")) {
+				fmt.Printf("%s:%d  %s\n", h.File, h.Line, h.Text)
+			}
+			return nil
+		},
+	}
+
+	writeCmd := &cobra.Command{
+		Use:   "write <chapter> [gap]",
+		Short: "Insert text from stdin below a gap",
+		Args:  cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, cs := load()
+			c := match(cs, args[0])
+			if c == nil {
+				return fmt.Errorf("no chapter matching %q", args[0])
+			}
+			gi := 0
+			if len(args) > 1 {
+				gi, _ = strconv.Atoi(args[1])
+			}
+			at := 0
+			if gi < len(c.Gaps) {
+				at = c.Gaps[gi].Line
+			}
+			body, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return err
+			}
+			if err := insert(r, c.File, at, string(body)); err != nil {
+				return err
+			}
+			fmt.Printf("wrote %d words into %s below line %d\n",
+				len(strings.Fields(string(body))), c.File, at)
+			return nil
+		},
+	}
+
+	gotoCmd := &cobra.Command{
+		Use:   "goto <chapter> [gap]",
+		Short: "Open the writing surface on a gap",
+		Args:  cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, cs := load()
+			ci := -1
+			for i := range cs {
+				if matches(cs[i], args[0]) {
+					ci = i
+					break
+				}
+			}
+			if ci < 0 {
+				return fmt.Errorf("no chapter matching %q", args[0])
+			}
+			gi := 0
+			if len(args) > 1 {
+				gi, _ = strconv.Atoi(args[1])
+			}
+			m := newModel(r, cs)
+			m.jumpTo(ci, gi)
+			p := tea.NewProgram(m, tea.WithAltScreen())
+			_, err := p.Run()
+			return err
+		},
+	}
+
+	root.AddCommand(status, gapsCmd, tasksCmd, findCmd, writeCmd, gotoCmd)
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
 
-func load() (string, []Chapter) {
-	root := repoRoot()
-	bud := budgets(root)
-	var cs []Chapter
-	for _, e := range order(root) {
-		rel, act, _ := strings.Cut(e, "\x00")
-		cs = append(cs, parse(root, rel, act, bud))
-	}
-	return root, cs
+func matches(c Chapter, q string) bool {
+	q = strings.ToLower(q)
+	return strings.Contains(strings.ToLower(c.File), q) ||
+		strings.Contains(strings.ToLower(c.Title), q)
 }
 
-const (
-	dim   = "\x1b[2m"
-	bold  = "\x1b[1m"
-	amber = "\x1b[33m"
-	green = "\x1b[32m"
-	cyan  = "\x1b[36m"
-	inv   = "\x1b[7m"
-	off   = "\x1b[0m"
-)
-
-func bar(pct float64, w int) string {
-	if pct > 100 {
-		pct = 100
+func match(cs []Chapter, q string) *Chapter {
+	for i := range cs {
+		if matches(cs[i], q) {
+			return &cs[i]
+		}
 	}
-	f := int(pct / 100 * float64(w))
-	return strings.Repeat("█", f) + dim + strings.Repeat("·", w-f) + off
+	return nil
+}
+
+func comma(n int) string {
+	s := strconv.Itoa(n)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
 }
 
 func totals(cs []Chapter) (prose, target, gaps int) {
@@ -257,182 +251,4 @@ func totals(cs []Chapter) (prose, target, gaps int) {
 	return
 }
 
-func main() {
-	root, cs := load()
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "goto":
-			// mama goto <chapter-substring> [gap#] — open the writing surface there
-			if len(os.Args) < 3 {
-				fmt.Println("usage: mama goto <chapter> [gap#]")
-				return
-			}
-			root2, cs2 := load()
-			gi := 0
-			if len(os.Args) > 3 {
-				gi, _ = strconv.Atoi(os.Args[3])
-			}
-			for i := range cs2 {
-				if strings.Contains(strings.ToLower(cs2[i].File), strings.ToLower(os.Args[2])) {
-					runAt(root2, cs2, i, gi)
-					return
-				}
-			}
-			fmt.Println("no chapter matching", os.Args[2])
-			return
-		case "gaps":
-			if len(os.Args) > 2 && os.Args[2] == "--json" {
-				fmt.Print("[")
-				first := true
-				for _, c := range cs {
-					for gi, gp := range c.Gaps {
-						if !first {
-							fmt.Print(",")
-						}
-						first = false
-						esc := func(x string) string {
-							b, _ := json.Marshal(x)
-							return string(b)
-						}
-						fmt.Printf(`{"chapter":%s,"file":%s,"gapIndex":%d,"line":%d,"kind":%s,"text":%s,"prose":%d,"target":%d}`,
-							esc(c.Title), esc(c.File), gi, gp.Line, esc(gp.Kind), esc(gp.Text), c.Prose, c.Target)
-					}
-				}
-				fmt.Println("]")
-				return
-			}
-			for _, c := range cs {
-				if len(c.Gaps) == 0 {
-					continue
-				}
-				fmt.Printf("\n%s%s%s  %s\n", bold, c.Title, off, dim+c.File+off)
-				for _, g := range c.Gaps {
-					k := amber + g.Kind + off
-					if g.Kind == "PLAN" {
-						k = cyan + g.Kind + off
-					}
-					fmt.Printf("  %s:%-4d %s  %s\n", dim+"L"+off, g.Line, k, g.Text)
-				}
-			}
-			fmt.Println()
-			return
-		case "tasks":
-			root2, cs2 := load()
-			ts, _, _ := scanAll(root2, cs2)
-			last := ""
-			n := 0
-			for _, t := range ts {
-				if t.Done {
-					continue
-				}
-				n++
-				if t.File != last {
-					last = t.File
-					fmt.Printf("\n%s%s%s\n", dim, t.File, off)
-				}
-				fmt.Printf("  %s%d%s  %s\n", dim, t.Line, off, t.Text)
-			}
-			fmt.Printf("\n%d open\n", n)
-			return
-		case "find":
-			if len(os.Args) < 3 {
-				fmt.Println("usage: mama find <query>")
-				return
-			}
-			root2, cs2 := load()
-			_, _, lines := scanAll(root2, cs2)
-			for _, h := range search(lines, strings.Join(os.Args[2:], " ")) {
-				fmt.Printf("%s%s:%d%s  %s\n", dim, h.File, h.Line, off, h.Text)
-			}
-			return
-		case "write":
-			// mama write <chapter-substring> [gap#]   — text on stdin
-			if len(os.Args) < 3 {
-				fmt.Println("usage: mama write <chapter> [gap#] < file")
-				return
-			}
-			root2, cs2 := load()
-			var target *Chapter
-			for i := range cs2 {
-				if strings.Contains(strings.ToLower(cs2[i].File), strings.ToLower(os.Args[2])) ||
-					strings.Contains(strings.ToLower(cs2[i].Title), strings.ToLower(os.Args[2])) {
-					target = &cs2[i]
-					break
-				}
-			}
-			if target == nil {
-				fmt.Println("no chapter matching", os.Args[2])
-				os.Exit(1)
-			}
-			gi := 0
-			if len(os.Args) > 3 {
-				gi, _ = strconv.Atoi(os.Args[3])
-			}
-			p := &pad{file: target.File}
-			if gi < len(target.Gaps) {
-				p.at = target.Gaps[gi].Line
-			}
-			body, _ := io.ReadAll(os.Stdin)
-			for _, r := range string(body) {
-				p.insert(r)
-			}
-			if err := p.save(root2); err != nil {
-				fmt.Println("save failed:", err)
-				os.Exit(1)
-			}
-			fmt.Printf("wrote %d words into %s below line %d\n",
-				p.words(), target.File, p.at)
-			return
-		case "status":
-			if len(os.Args) > 2 && os.Args[2] == "--json" {
-				p, t, g := totals(cs)
-				root2, _ := load()
-				ts, docs, _ := scanAll(root2, cs)
-				nt := 0
-				for _, x := range ts {
-					if !x.Done {
-						nt++
-					}
-				}
-				arts := artifacts(root2)
-				nd := 0
-				for _, a := range arts {
-					if a.Digitized != "yes" {
-						nd++
-					}
-				}
-				pct := 0.0
-				if t > 0 {
-					pct = 100 * float64(p) / float64(t)
-				}
-				fmt.Printf(`{"prose":%d,"target":%d,"pct":%.1f,"gaps":%d,"tasks":%d,"docs":%d,"artifacts":%d,"undigitized":%d,"chapters":%d}`+"\n",
-					p, t, pct, g, nt, len(docs), len(arts), nd, len(cs))
-				return
-			}
-			p, t, g := totals(cs)
-			root2, _ := load()
-			ts, docs, _ := scanAll(root2, cs)
-			nt := 0
-			for _, x := range ts {
-				if !x.Done {
-					nt++
-				}
-			}
-			fmt.Printf("%d chapters · %s of %s words · %d gaps · %d tasks · %d research docs · %d artifacts\n",
-				len(cs), comma(p), comma(t), g, nt, len(docs), len(artifacts(root2)))
-			return
-		default:
-			fmt.Println("usage: mama [gaps|tasks|find <q>|write <ch> [gap#]|status]")
-			return
-		}
-	}
-	run(root, cs)
-}
-
-func comma(n int) string {
-	s := strconv.Itoa(n)
-	for i := len(s) - 3; i > 0; i -= 3 {
-		s = s[:i] + "," + s[i:]
-	}
-	return s
-}
+var _ = filepath.Base

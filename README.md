@@ -1,93 +1,73 @@
 # mama
 
-A navigator for the whole project. **It stores nothing** — every number is
-computed from the files at startup. Delete it and the book is untouched.
+A lens over the manuscript. **It stores nothing** — every number is read from the
+markdown at startup. Delete it and the book is untouched.
 
-It does have opinions about where things live. Those conventions are below; where
-one is missing the feature degrades rather than failing.
+Built on [Cobra](https://cobra.dev) for the command tree and
+[Charm](https://charm.land) — Bubble Tea, Lip Gloss, Bubbles, Glamour — for the
+terminal UI.
 
-## Use
-
-```
-mama                        interactive
-mama gaps                   every open GAP/PLAN, with file and line
-mama tasks                  every open "- [ ]" in the repo
-mama find <q>               search every markdown file
-mama write <ch> [gap#]      write stdin into a chapter below a gap
-mama status                 one line
-```
-
-`mama write` takes text on stdin and inserts it in the same place the writing
-surface would — useful for dictation, for pasting from elsewhere, or from a
-script:
+## Commands
 
 ```
-mama write dunkins 1 < draft.txt
-say-to-text | mama write lindsey 0
+mama                        the interactive view
+mama status [--json]        chapters, words against target, what is open
+mama gaps [--json]          every open GAP and PLAN, with file and line
+mama tasks                  every open "- [ ]" across the project
+mama find <query>           search every markdown file
+mama write <ch> [gap]       insert stdin below a gap
+mama goto <ch> [gap]        open the writing surface on a gap
+mama completion <shell>     shell completion
 ```
 
-Five tabs, `tab` or `1`–`5`:
+## The interactive view
 
-| | | |
-|---|---|---|
-| **1 Book** | chapters by act, prose against budget, gap counts | `enter` → gaps → `enter` → editor at that line |
-| **2 Tasks** | all 85 `- [ ]` across every file, grouped | `a` shows completed too |
-| **3 Archive** | `manifest.csv` sorted **undigitized first, most fragile first** — the work order | |
-| **4 Research** | rooms, sources, notes, transcripts; open task counts; `→` link to the chapter each backs | |
-| **5 Search** | `/` then type, `enter` to run | |
+Five tabs — `tab` cycles, `1`–`5` jump.
 
-`j`/`k` move, `h` back, `r` reload, `q` quit.
+| | |
+|---|---|
+| **Book** | chapters by act, prose against budget, gap counts |
+| **Tasks** | all open `- [ ]` in the repo, grouped by file (`a` shows done) |
+| **Archive** | `manifest.csv`, undigitized and most fragile first |
+| **Research** | rooms, sources, notes and transcripts, linked to the chapters they back |
+| **Search** | `/` then type |
 
-**On the Book tab:** `enter` opens the chapter's gaps, then `enter` again opens
-the **writing surface** on that gap. `w` jumps straight there. `e` hands off to
-`$EDITOR` at the right line instead. `x` closes a gap (deletes the block).
+On **Book**: `enter` opens the chapter's gaps, `enter` again opens the writing
+surface. `w` goes straight there. **`p` reads the chapter** rendered as markdown
+via Glamour. `e` hands off to `$EDITOR` at the right line. `x` closes a gap.
 
 ## The writing surface
 
-The gap's instruction is pinned at the top, the page is below it, and the word
-count runs live against the chapter's budget.
+A real editor — Bubbles' `textarea`, so cursor movement, selection, undo and
+wrapping all work. The gap's instruction is pinned above; the word count runs
+live against the chapter's budget.
 
 | | |
 |---|---|
 | `esc` | save and return |
-| `^X` | save, then close the gap |
-| `^C` | discard |
-| `^W` | delete the previous word |
-| `←` `→` | move the cursor |
+| `ctrl+x` | save, then close the gap |
+| `ctrl+c` | discard |
 
-Saving **appends beneath the gap block** and leaves the gap marker alone — a gap
-is a note to yourself and only you decide when it is answered. `^X` or `x` closes
-it when you are satisfied.
+Saving **appends beneath the gap block** and leaves the marker alone — a gap is
+a note to yourself and only you decide when it is answered.
 
-*`^S` also saves where the terminal allows it, but `^S` is XOFF and some setups
-swallow it before the program sees it. `esc` is the reliable one.*
+## What it reads
 
-## File conventions it expects
+| Source | For |
+|---|---|
+| `yellow-mama/chapters.txt` | order, and the act headings |
+| `yellow-mama/*.md` | titles, word counts, gaps |
+| `yellow-mama/OUTLINE.md` | the per-chapter word budget table |
+| `yellow-mama/rooms/**`, `archive/**` | research, transcripts, artifacts |
+| `archive/manifest.csv` | the artifact register |
 
-```
-<book>/NN-slug.md              a manuscript chapter
-<book>/chapters.txt            order; ALL-CAPS comments become act headings
-<book>/OUTLINE.md              "Per-chapter budget" table → word targets
-<book>/rooms/*.md              research backing the chapters
-<book>/rooms/sources/*.md      archived primary sources
-archive/manifest.csv           artifact register (id, medium, fragility, digitized…)
-archive/transcripts/*.md       transcripts
-archive/notes/*.md             notes
-archive/interviews/*.md        interview plans
-```
+Anywhere in any markdown file: `> **GAP` / `> **PLAN` is an opening, `- [ ]` is a
+task, and **anything inside a `>` block is scaffolding** — excluded from prose
+counts, so progress measures writing rather than notes about writing.
 
-Anywhere in any markdown file:
-
-- `> **GAP …` or `> **PLAN …` — an opening in the manuscript
-- `- [ ]` / `- [x]` — a task
-- Anything inside a `>` block is scaffolding and is **excluded from prose counts**,
-  so progress measures writing rather than notes about writing.
-
-Research files link to chapters by filename token — `rooms/01-lindsey.md`
-finds `21-michael-lindsey.md`. Rename either and the link just disappears.
-
-Skipped entirely: `.git`, `_build`, `bin`, `_superseded`, `ocr`, `design`,
-`node_modules`.
+It finds the repo via `MAMA_ROOT`, then by climbing from the working directory,
+then by climbing from the binary — so it works when launched from a menu or a
+bar widget.
 
 ## Build
 
@@ -95,9 +75,7 @@ Skipped entirely: `.git`, `_build`, `bin`, `_superseded`, `ocr`, `design`,
 make mama
 ```
 
-Go 1.26, one dependency (`golang.org/x/term`).
-
 ## Deliberately absent
 
-No note storage, no tagging, no sync, no config, no database. To record
+No note storage, no tagging, no sync, no config file, no database. To record
 something, write it in the file. The repo is the database.

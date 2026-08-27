@@ -1,0 +1,288 @@
+package main
+
+// The bubbletea program. Five tabs over the same repo scan, plus a writing
+// surface built on bubbles/textarea and a reader built on glamour.
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
+)
+
+type tab int
+
+const (
+	tBook tab = iota
+	tTasks
+	tArchive
+	tResearch
+	tSearch
+	nTabs
+)
+
+var tabNames = [nTabs]string{"Book", "Tasks", "Archive", "Research", "Search"}
+
+type screen int
+
+const (
+	scList screen = iota
+	scGaps
+	scWrite
+	scRead
+)
+
+type keymap struct {
+	up, down, left, right     key.Binding
+	tabNext, quit, reload     key.Binding
+	write, read, editor, done key.Binding
+	search, showDone          key.Binding
+	save, saveClose, discard  key.Binding
+}
+
+var keys = keymap{
+	up:        key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("j/k", "move")),
+	down:      key.NewBinding(key.WithKeys("j", "down")),
+	left:      key.NewBinding(key.WithKeys("h", "esc", "left"), key.WithHelp("h", "back")),
+	right:     key.NewBinding(key.WithKeys("enter", "l", "right"), key.WithHelp("enter", "open")),
+	tabNext:   key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next view")),
+	quit:      key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+	reload:    key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload")),
+	write:     key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "write")),
+	read:      key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "read")),
+	editor:    key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "editor")),
+	done:      key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "close gap")),
+	search:    key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
+	showDone:  key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "show done")),
+	save:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "save")),
+	saveClose: key.NewBinding(key.WithKeys("ctrl+x"), key.WithHelp("^x", "save & close gap")),
+	discard:   key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("^c", "discard")),
+}
+
+type model struct {
+	root  string
+	chaps []Chapter
+	tasks []Task
+	docs  []Doc
+	arts  []Artifact
+	lines map[string][]string
+	hits  []Hit
+
+	tab      tab
+	screen   screen
+	sel      [nTabs]int
+	gsel     int
+	showDone bool
+
+	query    string
+	typing   bool
+
+	ta       textarea.Model
+	vp       viewport.Model
+	writeAt  int
+	writeCh  int
+	baseWord int
+
+	w, h int
+	err  string
+}
+
+func newModel(root string, cs []Chapter) *model {
+	ta := textarea.New()
+	ta.Placeholder = ""
+	ta.ShowLineNumbers = false
+	ta.CharLimit = 0
+	ta.Prompt = ""
+
+	m := &model{root: root, chaps: cs, ta: ta, vp: viewport.New(80, 20), w: 90, h: 30}
+	m.rescan()
+	return m
+}
+
+func (m *model) rescan() {
+	_, m.chaps = load()
+	m.tasks, m.docs, m.lines = scanAll(m.root, m.chaps)
+	m.arts = artifacts(m.root)
+	if m.query != "" {
+		m.hits = search(m.lines, m.query)
+	}
+}
+
+func (m *model) jumpTo(chapter, gap int) {
+	if chapter < len(m.chaps) {
+		m.tab, m.sel[tBook] = tBook, chapter
+		if gap < len(m.chaps[chapter].Gaps) {
+			m.gsel = gap
+			m.startWrite()
+		}
+	}
+}
+
+func (m *model) openTasks() []Task {
+	var out []Task
+	for _, t := range m.tasks {
+		if m.showDone || !t.Done {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func (m *model) count() int {
+	switch m.tab {
+	case tBook:
+		if m.screen == scGaps {
+			return len(m.chaps[m.sel[tBook]].Gaps)
+		}
+		return len(m.chaps)
+	case tTasks:
+		return len(m.openTasks())
+	case tArchive:
+		return len(m.arts)
+	case tResearch:
+		return len(m.docs)
+	case tSearch:
+		return len(m.hits)
+	}
+	return 0
+}
+
+func (m *model) Init() tea.Cmd { return textarea.Blink }
+
+func clampi(v, n int) int {
+	if v < 0 || n == 0 {
+		return 0
+	}
+	if v >= n {
+		return n - 1
+	}
+	return v
+}
+
+func (m *model) startWrite() {
+	c := m.chaps[m.sel[tBook]]
+	m.writeCh = m.sel[tBook]
+	m.baseWord = c.Prose
+	m.writeAt = 0
+	if m.gsel < len(c.Gaps) {
+		m.writeAt = c.Gaps[m.gsel].Line
+	}
+	m.ta.Reset()
+	m.ta.SetWidth(min(74, m.w-8))
+	m.ta.SetHeight(max(5, m.h-14))
+	m.ta.Focus()
+	m.screen = scWrite
+}
+
+func (m *model) saveWrite(closeGapToo bool) {
+	c := m.chaps[m.writeCh]
+	if err := insert(m.root, c.File, m.writeAt, m.ta.Value()); err != nil {
+		m.err = err.Error()
+	}
+	if closeGapToo && m.writeAt > 0 {
+		if err := closeGap(m.root, c.File, m.writeAt); err != nil {
+			m.err = err.Error()
+		}
+	}
+	m.ta.Blur()
+	m.rescan()
+	m.screen = scList
+	m.gsel = 0
+}
+
+func (m *model) startRead() {
+	c := m.chaps[m.sel[tBook]]
+	b, err := os.ReadFile(filepath.Join(m.root, c.File))
+	if err != nil {
+		m.err = err.Error()
+		return
+	}
+	w := min(90, m.w-4)
+	r, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(w),
+	)
+	if err != nil {
+		m.err = err.Error()
+		return
+	}
+	out, err := r.Render(string(b))
+	if err != nil {
+		m.err = err.Error()
+		return
+	}
+	m.vp = viewport.New(w, max(5, m.h-6))
+	m.vp.SetContent(out)
+	m.screen = scRead
+}
+
+func (m *model) openEditor() tea.Cmd {
+	var file string
+	var line int
+	switch m.tab {
+	case tBook:
+		c := m.chaps[m.sel[tBook]]
+		file = c.File
+		if m.screen == scGaps && m.gsel < len(c.Gaps) {
+			line = c.Gaps[m.gsel].Line
+		}
+	case tTasks:
+		ts := m.openTasks()
+		if len(ts) == 0 {
+			return nil
+		}
+		t := ts[clampi(m.sel[tTasks], len(ts))]
+		file, line = t.File, t.Line
+	case tArchive:
+		file, line = filepath.Join("archive", "manifest.csv"), m.sel[tArchive]+2
+	case tResearch:
+		if len(m.docs) == 0 {
+			return nil
+		}
+		file = m.docs[clampi(m.sel[tResearch], len(m.docs))].File
+	case tSearch:
+		if len(m.hits) == 0 {
+			return nil
+		}
+		hh := m.hits[clampi(m.sel[tSearch], len(m.hits))]
+		file, line = hh.File, hh.Line
+	}
+	if file == "" {
+		return nil
+	}
+	ed := os.Getenv("EDITOR")
+	if ed == "" {
+		ed = "vi"
+	}
+	if line < 1 {
+		line = 1
+	}
+	base := filepath.Base(ed)
+	var args []string
+	switch {
+	case strings.HasPrefix(base, "vi"), strings.HasPrefix(base, "nvim"),
+		strings.HasPrefix(base, "emacs"), strings.HasPrefix(base, "nano"):
+		args = []string{fmt.Sprintf("+%d", line), file}
+	case strings.HasPrefix(base, "hx"), strings.HasPrefix(base, "helix"):
+		args = []string{fmt.Sprintf("%s:%d", file, line)}
+	case strings.HasPrefix(base, "code"), strings.HasPrefix(base, "zed"), strings.HasPrefix(base, "cursor"):
+		args = []string{"--goto", fmt.Sprintf("%s:%d", file, line)}
+	default:
+		args = []string{file}
+	}
+	c := exec.Command(ed, args...)
+	c.Dir = m.root
+	return tea.ExecProcess(c, func(error) tea.Msg { return reloadMsg{} })
+}
+
+type reloadMsg struct{}
+
+func min(a, b int) int { if a < b { return a }; return b }
+func max(a, b int) int { if a > b { return a }; return b }
