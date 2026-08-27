@@ -316,6 +316,31 @@ func main() {
 				p.words(), target.File, p.at)
 			return
 		case "status":
+			if len(os.Args) > 2 && os.Args[2] == "--json" {
+				p, t, g := totals(cs)
+				root2, _ := load()
+				ts, docs, _ := scanAll(root2, cs)
+				nt := 0
+				for _, x := range ts {
+					if !x.Done {
+						nt++
+					}
+				}
+				arts := artifacts(root2)
+				nd := 0
+				for _, a := range arts {
+					if a.Digitized != "yes" {
+						nd++
+					}
+				}
+				pct := 0.0
+				if t > 0 {
+					pct = 100 * float64(p) / float64(t)
+				}
+				fmt.Printf(`{"prose":%d,"target":%d,"pct":%.1f,"gaps":%d,"tasks":%d,"docs":%d,"artifacts":%d,"undigitized":%d,"chapters":%d}`+"\n",
+					p, t, pct, g, nt, len(docs), len(arts), nd, len(cs))
+				return
+			}
 			p, t, g := totals(cs)
 			root2, _ := load()
 			ts, docs, _ := scanAll(root2, cs)
