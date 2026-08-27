@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -276,6 +277,44 @@ func main() {
 				fmt.Printf("%s%s:%d%s  %s\n", dim, h.File, h.Line, off, h.Text)
 			}
 			return
+		case "write":
+			// mama write <chapter-substring> [gap#]   — text on stdin
+			if len(os.Args) < 3 {
+				fmt.Println("usage: mama write <chapter> [gap#] < file")
+				return
+			}
+			root2, cs2 := load()
+			var target *Chapter
+			for i := range cs2 {
+				if strings.Contains(strings.ToLower(cs2[i].File), strings.ToLower(os.Args[2])) ||
+					strings.Contains(strings.ToLower(cs2[i].Title), strings.ToLower(os.Args[2])) {
+					target = &cs2[i]
+					break
+				}
+			}
+			if target == nil {
+				fmt.Println("no chapter matching", os.Args[2])
+				os.Exit(1)
+			}
+			gi := 0
+			if len(os.Args) > 3 {
+				gi, _ = strconv.Atoi(os.Args[3])
+			}
+			p := &pad{file: target.File}
+			if gi < len(target.Gaps) {
+				p.at = target.Gaps[gi].Line
+			}
+			body, _ := io.ReadAll(os.Stdin)
+			for _, r := range string(body) {
+				p.insert(r)
+			}
+			if err := p.save(root2); err != nil {
+				fmt.Println("save failed:", err)
+				os.Exit(1)
+			}
+			fmt.Printf("wrote %d words into %s below line %d\n",
+				p.words(), target.File, p.at)
+			return
 		case "status":
 			p, t, g := totals(cs)
 			root2, _ := load()
@@ -290,7 +329,7 @@ func main() {
 				len(cs), comma(p), comma(t), g, nt, len(docs), len(artifacts(root2)))
 			return
 		default:
-			fmt.Println("usage: mama [gaps|tasks|find <q>|status]")
+			fmt.Println("usage: mama [gaps|tasks|find <q>|write <ch> [gap#]|status]")
 			return
 		}
 	}

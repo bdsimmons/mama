@@ -9,11 +9,21 @@ one is missing the feature degrades rather than failing.
 ## Use
 
 ```
-mama              interactive
-mama gaps         every open GAP/PLAN, with file and line
-mama tasks        every open "- [ ]" in the repo
-mama find <q>     search every markdown file
-mama status       one line
+mama                        interactive
+mama gaps                   every open GAP/PLAN, with file and line
+mama tasks                  every open "- [ ]" in the repo
+mama find <q>               search every markdown file
+mama write <ch> [gap#]      write stdin into a chapter below a gap
+mama status                 one line
+```
+
+`mama write` takes text on stdin and inserts it in the same place the writing
+surface would — useful for dictation, for pasting from elsewhere, or from a
+script:
+
+```
+mama write dunkins 1 < draft.txt
+say-to-text | mama write lindsey 0
 ```
 
 Five tabs, `tab` or `1`–`5`:
@@ -26,8 +36,31 @@ Five tabs, `tab` or `1`–`5`:
 | **4 Research** | rooms, sources, notes, transcripts; open task counts; `→` link to the chapter each backs | |
 | **5 Search** | `/` then type, `enter` to run | |
 
-`j`/`k` move, `enter` opens `$EDITOR` at the right line, `h` back, `r` reload,
-`q` quit. After the editor exits everything is re-read from disk.
+`j`/`k` move, `h` back, `r` reload, `q` quit.
+
+**On the Book tab:** `enter` opens the chapter's gaps, then `enter` again opens
+the **writing surface** on that gap. `w` jumps straight there. `e` hands off to
+`$EDITOR` at the right line instead. `x` closes a gap (deletes the block).
+
+## The writing surface
+
+The gap's instruction is pinned at the top, the page is below it, and the word
+count runs live against the chapter's budget.
+
+| | |
+|---|---|
+| `esc` | save and return |
+| `^X` | save, then close the gap |
+| `^C` | discard |
+| `^W` | delete the previous word |
+| `←` `→` | move the cursor |
+
+Saving **appends beneath the gap block** and leaves the gap marker alone — a gap
+is a note to yourself and only you decide when it is answered. `^X` or `x` closes
+it when you are satisfied.
+
+*`^S` also saves where the terminal allows it, but `^S` is XOFF and some setups
+swallow it before the program sees it. `esc` is the reliable one.*
 
 ## File conventions it expects
 

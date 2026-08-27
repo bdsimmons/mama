@@ -149,8 +149,35 @@ func run(root string, cs []Chapter) {
 			u.move(-1)
 		case 'h', 27:
 			u.inGaps = false
-		case '\r', '\n', 'l':
+		case '\r', '\n':
+			if u.tab == tBook && u.inGaps {
+				u.write(fd)
+			} else {
+				u.open(fd, old)
+			}
+		case 'l':
 			u.open(fd, old)
+		case 'e':
+			u.open(fd, old)
+		case 'w':
+			if u.tab == tBook {
+				if !u.inGaps {
+					u.inGaps, u.gsel = true, 0
+				}
+				u.write(fd)
+			}
+		case 'x':
+			if u.tab == tBook && u.inGaps {
+				c := u.chaps[u.sel[tBook]]
+				if u.gsel < len(c.Gaps) {
+					closeGap(u.root, c.File, c.Gaps[u.gsel].Line)
+					u.reload()
+					if u.gsel >= len(u.chaps[u.sel[tBook]].Gaps) {
+						u.gsel = 0
+						u.inGaps = len(u.chaps[u.sel[tBook]].Gaps) > 0
+					}
+				}
+			}
 		}
 	}
 }
@@ -324,9 +351,16 @@ func (u *ui) draw(w, h int) {
 		u.drawSearch(&b, w, rows)
 	}
 
-	help := "tab/1-5 switch · j/k move · enter open · / search · r reload · q quit"
+	help := "tab/1-5 · j/k move · enter open · e editor · / search · r reload · q quit"
 	if u.tab == tTasks {
 		help = "a toggle done · " + help
+	}
+	if u.tab == tBook {
+		if u.inGaps {
+			help = "enter WRITE · x close gap · e editor · h back · q quit"
+		} else {
+			help = "enter gaps · w write · e editor · tab/1-5 · j/k · / search · q quit"
+		}
 	}
 	b.WriteString(fmt.Sprintf("\r\n %s%s%s\r\n", dim, trunc(help, w-2), off))
 	fmt.Print(b.String())
@@ -485,4 +519,24 @@ func (u *ui) drawSearch(b *strings.Builder, w, rows int) {
 	if len(u.hits) > 400 {
 		b.WriteString(dim + "\r\n   (truncated at 400)\r\n" + off)
 	}
+}
+
+
+// write opens the writing surface on the selected gap.
+func (u *ui) write(fd int) {
+	if len(u.chaps) == 0 {
+		return
+	}
+	c := u.chaps[u.sel[tBook]]
+	p := &pad{file: c.File, title: c.Title, target: c.Target, base: c.Prose, at: 0}
+	if u.inGaps && u.gsel < len(c.Gaps) {
+		g := c.Gaps[u.gsel]
+		p.at = g.Line
+		p.head = g.Kind + " — " + g.Text
+		p.body = g.Body
+	} else {
+		p.head = "Write into " + c.Title
+	}
+	u.writeSurface(fd, p)
+	u.inGaps = false
 }
