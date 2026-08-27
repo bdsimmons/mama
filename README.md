@@ -1,52 +1,70 @@
 # mama
 
-A lens over the manuscript. **It stores nothing.**
+A navigator for the whole project. **It stores nothing** — every number is
+computed from the files at startup. Delete it and the book is untouched.
 
-Every number it shows is computed from the markdown at startup. There is no
-database, no state file, no second copy of the book. Delete this program and the
-manuscript is untouched — that is the whole design constraint, and it is what
-stops the tool from becoming the project.
+It does have opinions about where things live. Those conventions are below; where
+one is missing the feature degrades rather than failing.
 
 ## Use
 
 ```
-mama            navigate: acts → chapters → gaps → editor
-mama gaps       print every open gap with file and line
-mama status     one line: chapters, words of target, gaps open
+mama              interactive
+mama gaps         every open GAP/PLAN, with file and line
+mama tasks        every open "- [ ]" in the repo
+mama find <q>     search every markdown file
+mama status       one line
 ```
 
-In the TUI: `j`/`k` move, `enter` opens, `h` goes back, `r` reloads, `q` quits.
-Arrow keys work too.
+Five tabs, `tab` or `1`–`5`:
 
-Selecting a gap opens `$EDITOR` **at that line**, with the right flag for vi,
-nvim, helix, VS Code, Zed or emacs. When the editor exits, everything is
-re-read from disk, so the counts and the gap list update from what you just
-wrote.
+| | | |
+|---|---|---|
+| **1 Book** | chapters by act, prose against budget, gap counts | `enter` → gaps → `enter` → editor at that line |
+| **2 Tasks** | all 85 `- [ ]` across every file, grouped | `a` shows completed too |
+| **3 Archive** | `manifest.csv` sorted **undigitized first, most fragile first** — the work order | |
+| **4 Research** | rooms, sources, notes, transcripts; open task counts; `→` link to the chapter each backs | |
+| **5 Search** | `/` then type, `enter` to run | |
 
-## What it reads
+`j`/`k` move, `enter` opens `$EDITOR` at the right line, `h` back, `r` reload,
+`q` quit. After the editor exits everything is re-read from disk.
 
-| Source | For |
-|---|---|
-| `yellow-mama/chapters.txt` | order, and the act headings |
-| `yellow-mama/*.md` | titles, word counts, gaps |
-| `yellow-mama/OUTLINE.md` | the per-chapter word budget table |
+## File conventions it expects
 
-**Prose vs words.** Anything inside a `>` block is scaffolding — plans, gaps,
-editorial notes — and is excluded from the prose count. So the progress bars
-measure writing, not notes about writing.
+```
+<book>/NN-slug.md              a manuscript chapter
+<book>/chapters.txt            order; ALL-CAPS comments become act headings
+<book>/OUTLINE.md              "Per-chapter budget" table → word targets
+<book>/rooms/*.md              research backing the chapters
+<book>/rooms/sources/*.md      archived primary sources
+archive/manifest.csv           artifact register (id, medium, fragility, digitized…)
+archive/transcripts/*.md       transcripts
+archive/notes/*.md             notes
+archive/interviews/*.md        interview plans
+```
 
-**Gaps** are lines beginning `> **GAP` or `> **PLAN`. `●` means a chapter has no
-PLAN block left on it; `○` means it is still planned rather than drafted.
+Anywhere in any markdown file:
+
+- `> **GAP …` or `> **PLAN …` — an opening in the manuscript
+- `- [ ]` / `- [x]` — a task
+- Anything inside a `>` block is scaffolding and is **excluded from prose counts**,
+  so progress measures writing rather than notes about writing.
+
+Research files link to chapters by filename token — `rooms/01-lindsey.md`
+finds `21-michael-lindsey.md`. Rename either and the link just disappears.
+
+Skipped entirely: `.git`, `_build`, `bin`, `_superseded`, `ocr`, `design`,
+`node_modules`.
 
 ## Build
 
 ```
-cd cmd/mama && go build -o ../../bin/mama .
+make mama
 ```
 
-Go 1.26. One dependency, `golang.org/x/term`, for raw mode and window size.
+Go 1.26, one dependency (`golang.org/x/term`).
 
 ## Deliberately absent
 
-No note storage, no tagging, no sync, no config file, no database. If you want
-to record something, write it in the chapter. The book is the database.
+No note storage, no tagging, no sync, no config, no database. To record
+something, write it in the file. The repo is the database.

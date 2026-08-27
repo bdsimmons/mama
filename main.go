@@ -247,13 +247,50 @@ func main() {
 			}
 			fmt.Println()
 			return
+		case "tasks":
+			root2, cs2 := load()
+			ts, _, _ := scanAll(root2, cs2)
+			last := ""
+			n := 0
+			for _, t := range ts {
+				if t.Done {
+					continue
+				}
+				n++
+				if t.File != last {
+					last = t.File
+					fmt.Printf("\n%s%s%s\n", dim, t.File, off)
+				}
+				fmt.Printf("  %s%d%s  %s\n", dim, t.Line, off, t.Text)
+			}
+			fmt.Printf("\n%d open\n", n)
+			return
+		case "find":
+			if len(os.Args) < 3 {
+				fmt.Println("usage: mama find <query>")
+				return
+			}
+			root2, cs2 := load()
+			_, _, lines := scanAll(root2, cs2)
+			for _, h := range search(lines, strings.Join(os.Args[2:], " ")) {
+				fmt.Printf("%s%s:%d%s  %s\n", dim, h.File, h.Line, off, h.Text)
+			}
+			return
 		case "status":
 			p, t, g := totals(cs)
-			fmt.Printf("%d chapters · %s words of %s · %d open\n",
-				len(cs), comma(p), comma(t), g)
+			root2, _ := load()
+			ts, docs, _ := scanAll(root2, cs)
+			nt := 0
+			for _, x := range ts {
+				if !x.Done {
+					nt++
+				}
+			}
+			fmt.Printf("%d chapters · %s of %s words · %d gaps · %d tasks · %d research docs · %d artifacts\n",
+				len(cs), comma(p), comma(t), g, nt, len(docs), len(artifacts(root2)))
 			return
 		default:
-			fmt.Println("usage: mama [gaps|status]")
+			fmt.Println("usage: mama [gaps|tasks|find <q>|status]")
 			return
 		}
 	}
