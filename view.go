@@ -74,9 +74,13 @@ func (m *model) View() string {
 	}
 	open := len(m.openTasks())
 
-	b.WriteString("  " + sTitle.Render("THE LEGACY OF YELLOW MAMA") + "   " +
-		bar(pct, 16) + sDim.Render(fmt.Sprintf("  %s/%s · %d gaps · %d tasks",
-		comma(prose), comma(target), gaps, open)) + "\n\n")
+	prog := comma(prose)
+	if target > 0 {
+		prog = comma(prose) + "/" + comma(target)
+	}
+	b.WriteString("  " + sTitle.Render(strings.ToUpper(bookTitle(m.root))) + "   " +
+		bar(pct, 16) + sDim.Render(fmt.Sprintf("  %s · %d gaps · %d tasks",
+		prog, gaps, open)) + "\n\n")
 
 	var tabs []string
 	for i, n := range tabNames {
@@ -373,7 +377,7 @@ func (m *model) viewRead() string {
 	c := m.chaps[clampi(m.readCh, len(m.chaps))]
 	var b strings.Builder
 	b.WriteString("  " + sTitle.Render(c.Title) + "  " +
-		sDim.Render(fmt.Sprintf("%s of %s words", comma(c.Prose), comma(c.Target))) + "\n")
+		sDim.Render(wordsOf(c.Prose, c.Target)) + "\n")
 	b.WriteString(m.vp.View() + "\n")
 
 	if len(c.Gaps) > 0 {

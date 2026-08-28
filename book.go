@@ -98,7 +98,17 @@ func repoRoot() string {
 
 // bookDir is the directory holding the manuscript: whatever `.mama` names, or
 // the first directory containing a chapters.txt.
+// bookFlag is set by --book, or by MAMA_BOOK in the environment. It wins over
+// the .mama config so one installed binary can move between books.
+var bookFlag string
+
 func bookDir(root string) string {
+	if bookFlag != "" {
+		return bookFlag
+	}
+	if b := os.Getenv("MAMA_BOOK"); b != "" {
+		return b
+	}
 	if b := loadConfig(root).Book; b != "" {
 		return b
 	}
@@ -313,4 +323,31 @@ func chaptersIn(root, dir string) []Chapter {
 		out = append(out, parse(root, filepath.Join(dir, filepath.Base(p)), "", bud))
 	}
 	return out
+}
+
+// bookTitle reads `title:` from the book's metadata.yaml. Falls back to the
+// directory name so a book that has not been given metadata still displays
+// as something other than another book's title.
+func bookTitle(root string) string {
+	dir := bookDir(root)
+	b, err := os.ReadFile(filepath.Join(root, dir, "metadata.yaml"))
+	if err == nil {
+		for _, l := range strings.Split(string(b), "\n") {
+			if v, ok := strings.CutPrefix(strings.TrimSpace(l), "title:"); ok {
+				if t := strings.TrimSpace(strings.Trim(strings.TrimSpace(v), `"'`)); t != "" {
+					return t
+				}
+			}
+		}
+	}
+	return strings.ReplaceAll(dir, "-", " ")
+}
+
+// wordsOf renders progress against a target, or just the count when the book
+// has no OUTLINE.md budget table. "4,427 of 0 words" is never what you meant.
+func wordsOf(prose, target int) string {
+	if target <= 0 {
+		return comma(prose) + " words"
+	}
+	return comma(prose) + " of " + comma(target) + " words"
 }

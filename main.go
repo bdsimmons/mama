@@ -43,6 +43,9 @@ func main() {
 		},
 	}
 
+	root.PersistentFlags().StringVar(&bookFlag, "book", "",
+		"book directory to work on (overrides .mama; or set MAMA_BOOK)")
+
 	var jsonOut bool
 
 	status := &cobra.Command{
@@ -78,8 +81,8 @@ func main() {
 				fmt.Println(string(b))
 				return nil
 			}
-			fmt.Printf("%d chapters · %s of %s words · %d gaps · %d tasks · %d research docs · %d artifacts\n",
-				len(cs), comma(prose), comma(target), gaps, open, len(docs), len(arts))
+			fmt.Printf("%d chapters · %s · %d gaps · %d tasks · %d research docs · %d artifacts\n",
+				len(cs), wordsOf(prose, target), gaps, open, len(docs), len(arts))
 			return nil
 		},
 	}
@@ -284,7 +287,6 @@ func main() {
 	}
 
 	var minWords int
-	var voiceBook string
 	voiceCmd := &cobra.Command{
 		Use:   "voice [chapter]",
 		Short: "Measure a chapter against the voice of your own drafted prose",
@@ -293,7 +295,7 @@ func main() {
 			"no correct sentence length — only whether this sounds like the book.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			r, cs := load()
-			if voiceBook != "" {
+			if voiceBook := bookFlag; voiceBook != "" {
 				cs = chaptersIn(r, voiceBook)
 				if len(cs) == 0 {
 					return fmt.Errorf("no chapters found in %s", voiceBook)
@@ -340,7 +342,6 @@ func main() {
 		},
 	}
 	voiceCmd.Flags().IntVar(&minWords, "min", 150, "words a chapter needs before it counts")
-	voiceCmd.Flags().StringVar(&voiceBook, "book", "", "measure a different book directory")
 
 	lintCmd := &cobra.Command{
 		Use:   "lint [files...]",
