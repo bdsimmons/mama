@@ -106,14 +106,14 @@ None of these are required. A book with no `archive/` simply shows an empty tab.
 **Chapter list** — `enter` **edit** · `p` preview · `w` write into a gap ·
 `G` list gaps · `g` new gap · `e` hand off to `$EDITOR` · `j/k` move
 
-**Editor** — the whole chapter, editable. `^s` save · `esc` save and back ·
-`^n`/`^p` jump to the next/previous gap marker · `^r` preview · `^q` back
-without saving. A `●` by the title means unsaved.
+**Editor** — the whole chapter, editable. `ctrl-s` save · `esc` save and back ·
+`ctrl-n` / `ctrl-p` jump to the next/previous gap marker · `ctrl-r` preview ·
+`ctrl-q` back without saving. A `●` by the title means unsaved.
 
 **Preview** — `n`/`N` next/previous gap · `enter` write at this gap · `i` edit ·
 `x` close this gap · `g` new gap · `q` back
 
-**Writing** — `esc` save · `ctrl+x` save and close the gap · `ctrl+c` discard
+**Writing** — `esc` save · `ctrl-x` save and close the gap · `ctrl-c` discard
 
 **Anywhere** — `/` search · `r` reload · `tab` next view · `q` quit
 
