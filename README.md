@@ -67,13 +67,19 @@ a note to yourself and only you decide when it is answered.
 
 ## What it reads
 
+A book is a directory of markdown files with a `chapters.txt` beside them.
+That is the whole contract.
+
 | Source | For |
 |---|---|
-| `yellow-mama/chapters.txt` | order, and the act headings |
-| `yellow-mama/*.md` | titles, word counts, gaps |
-| `yellow-mama/OUTLINE.md` | the per-chapter word budget table |
-| `yellow-mama/rooms/**`, `archive/**` | research, transcripts, artifacts |
-| `archive/manifest.csv` | the artifact register |
+| `<book>/chapters.txt` | order; an ALL-CAPS comment line becomes a part heading |
+| `<book>/NN-slug.md` | titles, word counts, gaps |
+| `<book>/metadata.yaml` | title and author |
+| `<book>/OUTLINE.md` | the per-chapter word budget table, if you want targets |
+| `<book>/**`, `archive/**` | research, transcripts, artifacts |
+| `archive/manifest.csv` | the artifact register, if you keep one |
+
+Everything except `chapters.txt` and the chapters themselves is optional.
 
 Anywhere in any markdown file: `> **GAP` / `> **PLAN` is an opening, `- [ ]` is a
 task, and **anything inside a `>` block is scaffolding** — excluded from prose
@@ -83,11 +89,31 @@ It finds the repo via `MAMA_ROOT`, then by climbing from the working directory,
 then by climbing from the binary — so it works when launched from a menu or a
 bar widget.
 
-## Build
+## Which book
+
+A repo can hold more than one. `--book <dir>` or `MAMA_BOOK` picks one; a
+`.mama` file at the repo root sets the default:
 
 ```
-make mama
+book = "my-book"
 ```
+
+With none of those, it takes the first directory containing a `chapters.txt`.
+
+## Install
+
+```
+go install github.com/bdsimmons/mama@latest
+```
+
+Or from a clone, which also installs shell completion:
+
+```
+git clone https://github.com/bdsimmons/mama
+cd mama && make install          # → ~/.local/bin/mama
+```
+
+Needs Go 1.26. No other dependencies, no runtime, no config to create.
 
 ## Deliberately absent
 

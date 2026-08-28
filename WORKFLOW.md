@@ -131,7 +131,7 @@ supports: 21-michael-lindsey.md
 Comma-separated for several. `mama link` writes the line for you:
 
 ```bash
-mama link yellow-mama/rooms/01-lindsey.md lindsey
+mama link research/01-lindsey.md lindsey
 ```
 
 **Then ask what backs a chapter** — `s` from the chapter list, or:
@@ -164,7 +164,7 @@ Two commands, and neither one is a style guide.
 ### `mama lint` — your rules, not somebody else's
 
 Runs [Vale](https://vale.sh) (MIT, written in Go) against a style built from
-**your own stated rules**, in `.vale/styles/Simmons/`:
+**your own stated rules**, in `.vale/styles/<YourStyle>/`:
 
 | Rule | What it catches | Where it comes from |
 |---|---|---|
@@ -227,7 +227,7 @@ What **mama** controls lives in `.mama` at the repo root, and all of it is
 optional:
 
 ```toml
-book = "yellow-mama"
+book = "my-book"
 
 [view]
 width         = 82      # reading measure in columns; 66–90 is the readable range

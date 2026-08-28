@@ -1,4 +1,4 @@
-module github.com/bdsimmons/simmons-books/cmd/mama
+module github.com/bdsimmons/mama
 
 go 1.26
 
