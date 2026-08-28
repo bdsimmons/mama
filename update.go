@@ -9,9 +9,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
-		m.ta.SetWidth(min(74, m.w-8))
+		m.ta.SetWidth(min(m.cfg.WritingWidth, m.w-8))
 		m.ta.SetHeight(max(5, m.h-14))
-		m.vp.Width = min(90, m.w-4)
+		m.vp.Width = min(m.cfg.Width, m.w-4)
 		m.vp.Height = max(5, m.h-6)
 		return m, nil
 

@@ -112,6 +112,7 @@ type model struct {
 	// built once, before the program owns stdin: glamour's auto-style queries
 	// the terminal, and that query blocks if bubbletea is holding stdin.
 	rend *glamour.TermRenderer
+	cfg  config
 
 	w, h int
 	err  string
@@ -136,9 +137,17 @@ func newModel(root string, cs []Chapter) *model {
 
 	ed := newTA()
 
-	m := &model{root: root, chaps: cs, ta: ta, ed: ed, vp: viewport.New(80, 20), w: 90, h: 30}
+	cfg := loadConfig(root)
+	ed.ShowLineNumbers = cfg.LineNumbers
+
+	m := &model{root: root, chaps: cs, ta: ta, ed: ed, cfg: cfg,
+		vp: viewport.New(80, 20), w: 90, h: 30}
 	// Built here, not on demand: this runs before tea.NewProgram takes stdin.
-	m.rend, _ = glamour.NewTermRenderer(glamour.WithAutoStyle(), glamour.WithWordWrap(90))
+	styleOpt := glamour.WithAutoStyle()
+	if cfg.Style != "auto" && cfg.Style != "" {
+		styleOpt = glamour.WithStandardStyle(cfg.Style)
+	}
+	m.rend, _ = glamour.NewTermRenderer(styleOpt, glamour.WithWordWrap(cfg.Width))
 	m.rescan()
 	return m
 }
@@ -310,7 +319,7 @@ func (m *model) startWrite() {
 		m.writeAt = c.Gaps[m.gsel].Line
 	}
 	m.ta.Reset()
-	m.ta.SetWidth(min(74, m.w-8))
+	m.ta.SetWidth(min(m.cfg.WritingWidth, m.w-8))
 	m.ta.SetHeight(max(5, m.h-14))
 	m.ta.Focus()
 	m.screen = scWrite
@@ -342,7 +351,7 @@ func (m *model) startRead() {
 		m.err = err.Error()
 		return
 	}
-	w := min(90, m.w-4)
+	w := min(m.cfg.Width, m.w-4)
 	if m.rend == nil {
 		m.rend, _ = glamour.NewTermRenderer(glamour.WithStandardStyle("dark"), glamour.WithWordWrap(w))
 	}

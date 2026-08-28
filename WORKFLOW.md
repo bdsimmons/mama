@@ -117,6 +117,46 @@ without saving. A `●` by the title means unsaved.
 
 **Anywhere** — `/` search · `r` reload · `tab` next view · `q` quit
 
+## Appearance
+
+**Font size and typeface belong to the terminal, not to mama.** A terminal
+program draws in whatever font the terminal is using; it cannot change it.
+
+On Omarchy:
+
+```bash
+omarchy font list          # what is installed
+omarchy font current       # what you are using
+omarchy font set <name>    # change it system-wide
+```
+
+Size lives in your terminal's own config — `font-size` in
+`~/.config/ghostty/config`, `size` under `[font]` in
+`~/.config/alacritty/alacritty.toml`. Most terminals also zoom live with
+`ctrl +` / `ctrl -`, which is the quickest way to find a size you can write in
+for two hours.
+
+What **mama** controls lives in `.mama` at the repo root, and all of it is
+optional:
+
+```toml
+book = "yellow-mama"
+
+[view]
+width         = 82      # reading measure in columns; 66–90 is the readable range
+writing_width = 74      # measure for the focused writing surface
+line_numbers  = true    # in the chapter editor
+style         = "auto"  # preview theme: auto | dark | light | dracula | notty
+```
+
+A nonsense value is ignored rather than fatal — a typo in a config file should
+never stop you writing.
+
+**Width is the setting that matters most.** Line length, not font size, is what
+makes long prose readable: much past 90 columns and your eye loses its place
+returning to the left margin. If the text feels hard to read, narrow the measure
+before you shrink the font.
+
 ## Things it deliberately does not do
 
 No note storage, no tags, no sync, no database. The markdown is the only state.

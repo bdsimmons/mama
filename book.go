@@ -99,18 +99,8 @@ func repoRoot() string {
 // bookDir is the directory holding the manuscript: whatever `.mama` names, or
 // the first directory containing a chapters.txt.
 func bookDir(root string) string {
-	if b, err := os.ReadFile(filepath.Join(root, ".mama")); err == nil {
-		for _, l := range strings.Split(string(b), "\n") {
-			l = strings.TrimSpace(l)
-			if strings.HasPrefix(l, "book") {
-				if _, v, ok := strings.Cut(l, "="); ok {
-					v = strings.Trim(strings.TrimSpace(v), `"`)
-					if v != "" {
-						return v
-					}
-				}
-			}
-		}
+	if b := loadConfig(root).Book; b != "" {
+		return b
 	}
 	hits, _ := filepath.Glob(filepath.Join(root, "*", "chapters.txt"))
 	if len(hits) > 0 {
