@@ -38,6 +38,7 @@ const (
 	scGaps
 	scWrite
 	scRead
+	scEdit
 )
 
 type keymap struct {
@@ -102,8 +103,28 @@ type model struct {
 	gapPrompt bool
 	gapText   string
 
+	// chapter editor
+	ed      textarea.Model
+	editCh  int
+	editing bool
+	dirty   bool
+
+	// built once, before the program owns stdin: glamour's auto-style queries
+	// the terminal, and that query blocks if bubbletea is holding stdin.
+	rend *glamour.TermRenderer
+
 	w, h int
 	err  string
+}
+
+// newTA is the shared textarea configuration, so tests build the same thing
+// the program does.
+func newTA() textarea.Model {
+	t := textarea.New()
+	t.Prompt = ""
+	t.ShowLineNumbers = true
+	t.CharLimit = 0
+	return t
 }
 
 func newModel(root string, cs []Chapter) *model {
@@ -113,9 +134,92 @@ func newModel(root string, cs []Chapter) *model {
 	ta.CharLimit = 0
 	ta.Prompt = ""
 
-	m := &model{root: root, chaps: cs, ta: ta, vp: viewport.New(80, 20), w: 90, h: 30}
+	ed := newTA()
+
+	m := &model{root: root, chaps: cs, ta: ta, ed: ed, vp: viewport.New(80, 20), w: 90, h: 30}
+	// Built here, not on demand: this runs before tea.NewProgram takes stdin.
+	m.rend, _ = glamour.NewTermRenderer(glamour.WithAutoStyle(), glamour.WithWordWrap(90))
 	m.rescan()
 	return m
+}
+
+// startEdit loads the whole chapter into an editor. No rendering on this path,
+// which is why it is instant.
+func (m *model) startEdit() {
+	m.editCh = m.sel[tBook]
+	c := m.chaps[m.editCh]
+	b, err := os.ReadFile(filepath.Join(m.root, c.File))
+	if err != nil {
+		m.err = err.Error()
+		return
+	}
+	m.ed.SetWidth(m.w - 4)
+	m.ed.SetHeight(max(5, m.h - 7))
+	m.ed.SetValue(string(b))
+	for i := 0; i < m.ed.LineCount()+1 && m.ed.Line() > 0; i++ {
+		m.ed.CursorUp()
+	}
+	m.ed.CursorStart()
+	m.ed.Focus()
+	m.dirty = false
+	m.screen = scEdit
+}
+
+func (m *model) saveEdit() {
+	c := m.chaps[clampi(m.editCh, len(m.chaps))]
+	if err := os.WriteFile(filepath.Join(m.root, c.File),
+		[]byte(m.ed.Value()), 0o644); err != nil {
+		m.err = err.Error()
+		return
+	}
+	m.dirty = false
+	m.rescan()
+}
+
+// jumpGapInEditor moves the cursor to the next gap marker in the buffer.
+func (m *model) jumpGapInEditor(dir int) {
+	lines := strings.Split(m.ed.Value(), "\n")
+	var marks []int
+	for i, l := range lines {
+		if strings.HasPrefix(strings.TrimSpace(l), "> **GAP") ||
+			strings.HasPrefix(strings.TrimSpace(l), "> **PLAN") {
+			marks = append(marks, i)
+		}
+	}
+	if len(marks) == 0 {
+		return
+	}
+	cur := m.ed.Line()
+	target := marks[0]
+	if dir > 0 {
+		for _, x := range marks {
+			if x > cur {
+				target = x
+				break
+			}
+		}
+	} else {
+		target = marks[len(marks)-1]
+		for i := len(marks) - 1; i >= 0; i-- {
+			if marks[i] < cur {
+				target = marks[i]
+				break
+			}
+		}
+	}
+	// CursorStart is start-of-line, not start-of-document, so walk there.
+	for i := 0; i < len(lines)+1 && m.ed.Line() > 0; i++ {
+		m.ed.CursorUp()
+	}
+	m.ed.CursorStart()
+	for m.ed.Line() < target {
+		before := m.ed.Line()
+		m.ed.CursorDown()
+		if m.ed.Line() == before {
+			break // hit the end
+		}
+	}
+	m.ed.CursorStart()
 }
 
 func (m *model) rescan() {
@@ -239,12 +343,10 @@ func (m *model) startRead() {
 		return
 	}
 	w := min(90, m.w-4)
-	r, err := glamour.NewTermRenderer(glamour.WithAutoStyle(), glamour.WithWordWrap(w))
-	if err != nil {
-		m.err = err.Error()
-		return
+	if m.rend == nil {
+		m.rend, _ = glamour.NewTermRenderer(glamour.WithStandardStyle("dark"), glamour.WithWordWrap(w))
 	}
-	out, err := r.Render(string(b))
+	out, err := m.rend.Render(string(b))
 	if err != nil {
 		m.err = err.Error()
 		return

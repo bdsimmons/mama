@@ -52,6 +52,8 @@ func trunc(s string, n int) string {
 
 func (m *model) View() string {
 	switch m.screen {
+	case scEdit:
+		return m.viewEdit()
 	case scWrite:
 		return m.viewWrite()
 	case scRead:
@@ -103,7 +105,7 @@ func (m *model) View() string {
 		if m.screen == scGaps {
 			help = "enter write · x close gap · e editor · h back · q quit"
 		} else {
-			help = "enter read · w write · G gaps · g new gap · e editor · tab views · q quit"
+			help = "enter edit · p preview · w write gap · G gaps · g new gap · e $EDITOR · q quit"
 		}
 	} else if m.tab == tTasks {
 		help = "a show done · " + help
@@ -290,6 +292,31 @@ func (m *model) viewSearch(rows int) string {
 	return b.String()
 }
 
+func (m *model) viewEdit() string {
+	c := m.chaps[clampi(m.editCh, len(m.chaps))]
+	words := 0
+	for _, l := range strings.Split(m.ed.Value(), "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(l), ">") {
+			words += len(strings.Fields(l))
+		}
+	}
+	pct := 0.0
+	if c.Target > 0 {
+		pct = 100 * float64(words) / float64(c.Target)
+	}
+	flag := ""
+	if m.dirty {
+		flag = sWarn.Render(" ●")
+	}
+	var b strings.Builder
+	b.WriteString("  " + sTitle.Render(trunc(c.Title, 38)) + flag + "   " + bar(pct, 14) +
+		sDim.Render(fmt.Sprintf("  %s/%s", comma(words), comma(c.Target))) + "\n")
+	b.WriteString(m.ed.View() + "\n")
+	b.WriteString("  " + sHelp.Render(
+		"^s save · esc save & back · ^n/^p next gap · ^r preview · ^q back without saving"))
+	return b.String()
+}
+
 func (m *model) viewRead() string {
 	c := m.chaps[clampi(m.readCh, len(m.chaps))]
 	var b strings.Builder
@@ -305,7 +332,7 @@ func (m *model) viewRead() string {
 		}
 		b.WriteString("  " + kind + sDim.Render(fmt.Sprintf(" %d/%d  ", m.gsel+1, len(c.Gaps))) +
 			trunc(g.Text, m.w-20) + "\n")
-		b.WriteString("  " + sHelp.Render("n/N gaps · enter write here · x close it · g new gap · e editor · q back"))
+		b.WriteString("  " + sHelp.Render("n/N gaps · enter write here · i edit · x close it · g new gap · q back"))
 	} else {
 		b.WriteString("  " + sHelp.Render("no gaps · g new gap · e editor · ↑/↓ scroll · q back"))
 	}

@@ -38,6 +38,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		switch m.screen {
+		case scEdit:
+			return m.updateEdit(msg)
 		case scWrite:
 			return m.updateWrite(msg)
 		case scRead:
@@ -47,6 +49,41 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m *model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+s":
+		m.saveEdit()
+		return m, nil
+	case "esc":
+		m.saveEdit()
+		m.ed.Blur()
+		m.screen = scList
+		return m, nil
+	case "ctrl+q":
+		m.ed.Blur()
+		m.screen = scList
+		return m, nil
+	case "ctrl+n":
+		m.jumpGapInEditor(1)
+		return m, nil
+	case "ctrl+p":
+		m.jumpGapInEditor(-1)
+		return m, nil
+	case "ctrl+r":
+		m.saveEdit()
+		m.ed.Blur()
+		m.startRead()
+		return m, nil
+	}
+	before := m.ed.Value()
+	var cmd tea.Cmd
+	m.ed, cmd = m.ed.Update(msg)
+	if m.ed.Value() != before {
+		m.dirty = true
+	}
+	return m, cmd
 }
 
 func (m *model) updateWrite(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -97,6 +134,10 @@ func (m *model) updateRead(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.rescan()
 			m.startRead()
 		}
+		return m, nil
+	case "i":
+		m.sel[tBook] = m.readCh
+		m.startEdit()
 		return m, nil
 	case "e":
 		m.sel[tBook] = m.readCh
@@ -248,7 +289,7 @@ func (m *model) move(d int) {
 func (m *model) enter() (tea.Model, tea.Cmd) {
 	if m.tab == tBook {
 		if m.screen == scList {
-			m.startRead() // enter opens the chapter, not a list of its holes
+			m.startEdit() // enter opens the chapter for editing
 			return m, nil
 		}
 		m.startWrite()
