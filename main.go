@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -282,7 +283,89 @@ func main() {
 		},
 	}
 
-	root.AddCommand(status, gapsCmd, tasksCmd, findCmd, writeCmd, gotoCmd, initCmd, newCmd, gapCmd)
+	var minWords int
+	var voiceBook string
+	voiceCmd := &cobra.Command{
+		Use:   "voice [chapter]",
+		Short: "Measure a chapter against the voice of your own drafted prose",
+		Long: "Not a style guide. This compares each chapter to the average of your\n" +
+			"own chapters that have real prose in them, and reports drift. There is\n" +
+			"no correct sentence length — only whether this sounds like the book.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, cs := load()
+			if voiceBook != "" {
+				cs = chaptersIn(r, voiceBook)
+				if len(cs) == 0 {
+					return fmt.Errorf("no chapters found in %s", voiceBook)
+				}
+			}
+			var all []voiceStats
+			for _, c := range cs {
+				b, err := os.ReadFile(filepath.Join(r, c.File))
+				if err != nil {
+					continue
+				}
+				all = append(all, measure(c.Title, string(b)))
+			}
+			base := baseline(all, minWords)
+			if base.MeanSent == 0 {
+				return fmt.Errorf("no chapter has %d+ words yet — nothing to measure against", minWords)
+			}
+			fmt.Printf("baseline from %d chapters over %d words: "+
+				"%.1f words/sentence · %.0f%% under ten words · %.3f vocabulary spread\n\n",
+				base.Sentences, minWords, base.MeanSent, base.ShortPct, base.TTR)
+			fmt.Printf("%-30s %6s %9s %9s %9s\n",
+				"CHAPTER", "WORDS", "SENT LEN", "SHORT", "VOCAB")
+			for _, v := range all {
+				if len(args) > 0 && !strings.Contains(strings.ToLower(v.Chapter), strings.ToLower(args[0])) {
+					continue
+				}
+				if v.Words < minWords {
+					fmt.Printf("%-30.30s %6d %9s\n", v.Chapter, v.Words, "too short")
+					continue
+				}
+				ds, dsh, dt, _ := drift(v, base)
+				mark := func(d float64) string {
+					if abs(d) >= 30 {
+						return fmt.Sprintf("%+6.0f%%!", d)
+					}
+					return fmt.Sprintf("%+6.0f%% ", d)
+				}
+				fmt.Printf("%-30.30s %6d %9s %9s %9s\n",
+					v.Chapter, v.Words, mark(ds), mark(dsh), mark(dt))
+			}
+			fmt.Println("\n! marks a chapter more than 30% from your own average.")
+			fmt.Println("That is a flag to look, not a fault. Some chapters should differ.")
+			return nil
+		},
+	}
+	voiceCmd.Flags().IntVar(&minWords, "min", 150, "words a chapter needs before it counts")
+	voiceCmd.Flags().StringVar(&voiceBook, "book", "", "measure a different book directory")
+
+	lintCmd := &cobra.Command{
+		Use:   "lint [files...]",
+		Short: "Run the project's prose rules (needs vale)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, cs := load()
+			if _, err := exec.LookPath("vale"); err != nil {
+				return fmt.Errorf("vale not found.\n" +
+					"  Arch: sudo pacman -S vale\n" +
+					"  Go:   go install github.com/errata-ai/vale/v3/cmd/vale@latest")
+			}
+			target := args
+			if len(target) == 0 {
+				for _, c := range cs {
+					target = append(target, c.File)
+				}
+			}
+			v := exec.Command("vale", append([]string{"--no-exit"}, target...)...)
+			v.Dir, v.Stdout, v.Stderr = r, os.Stdout, os.Stderr
+			return v.Run()
+		},
+	}
+
+	root.AddCommand(status, gapsCmd, tasksCmd, findCmd, writeCmd, gotoCmd,
+		initCmd, newCmd, gapCmd, voiceCmd, lintCmd)
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}

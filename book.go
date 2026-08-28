@@ -288,3 +288,29 @@ func closeGap(root, rel string, n int) error {
 	out := append(append([]string{}, lines[:i]...), lines[j:]...)
 	return os.WriteFile(path, []byte(strings.Join(out, "\n")), 0o644)
 }
+
+// chaptersIn parses a book directory other than the configured one, so voice
+// can be measured against a different manuscript.
+func chaptersIn(root, dir string) []Chapter {
+	bud := budgets(root)
+	var out []Chapter
+	f, err := os.Open(filepath.Join(root, dir, "chapters.txt"))
+	if err == nil {
+		defer f.Close()
+		sc := bufio.NewScanner(f)
+		for sc.Scan() {
+			l := strings.TrimSpace(sc.Text())
+			if l == "" || strings.HasPrefix(l, "#") {
+				continue
+			}
+			out = append(out, parse(root, filepath.Join(dir, l), "", bud))
+		}
+		return out
+	}
+	g, _ := filepath.Glob(filepath.Join(root, dir, "[0-9]*-*.md"))
+	sort.Strings(g)
+	for _, p := range g {
+		out = append(out, parse(root, filepath.Join(dir, filepath.Base(p)), "", bud))
+	}
+	return out
+}

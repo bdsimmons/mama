@@ -117,6 +117,53 @@ None of these are required. A book with no `archive/` simply shows an empty tab.
 
 **Anywhere** — `/` search · `r` reload · `tab` next view · `q` quit
 
+## Checking the prose
+
+Two commands, and neither one is a style guide.
+
+### `mama lint` — your rules, not somebody else's
+
+Runs [Vale](https://vale.sh) (MIT, written in Go) against a style built from
+**your own stated rules**, in `.vale/styles/Simmons/`:
+
+| Rule | What it catches | Where it comes from |
+|---|---|---|
+| `Consolations` | journey · healing · tapestry · closure · lives on through · passed away · celebration of life | PROJECT_INSTRUCTIONS: "No 'journey,' no 'healing,' no 'tapestry.'" |
+| `Absolutes` | the only thing · every single · never once · statistics show | the brief's warning that "the only thing that keeps people out of prison" is unsupportable |
+| `RhetoricalRun` | three or more questions in a paragraph | NOTES: stacking questions cools the anger |
+| `Hedges` | somewhat · arguably · it seems that · to some extent | "plain, direct, unadorned" |
+
+**Vale ships Microsoft, Google, proselint and write-good packages and none of
+them are enabled here, deliberately.** A linter that flags passive voice in
+*"he was pronounced dead at 12:10 a.m."* is wrong, and one that softens a
+memoir's register is worse. `archive/` is exempt entirely — that material is
+evidence, not prose.
+
+Expect one false positive: chapter one quotes *"He lives on through you now"*
+in order to be angry about it, and the rule cannot tell quotation from
+assertion. Leave it; seeing it is cheaper than suppressing it.
+
+### `mama voice` — drift from your own baseline
+
+Measures every chapter against the average of **your own** drafted chapters and
+reports the difference. There is no correct sentence length; there is only
+whether this chapter sounds like the rest of the book.
+
+```
+mama voice --book no-word-for-me --min 150
+```
+
+`!` marks a chapter more than 30% off your own average. **That is a flag to
+look, not a fault** — some chapters should differ.
+
+It measures sentence length, the proportion of sentences under ten words, and
+vocabulary spread, over prose only: blockquotes, headings and tables are
+excluded, so quoting your father at length does not register as your voice
+changing.
+
+**These are crude numbers and voice is not really measurable.** What they are
+good for is noticing that a chapter has drifted before you can hear it.
+
 ## Appearance
 
 **Font size and typeface belong to the terminal, not to mama.** A terminal
