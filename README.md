@@ -1,7 +1,14 @@
-# mama
+# mama — manuscript manager
 
-A lens over the manuscript. **It stores nothing** — every number is read from the
-markdown at startup. Delete it and the book is untouched.
+Navigate a book written in markdown, find what is missing, and write into it.
+
+**Organised around what is missing rather than what is written.** Most writing
+tools organise your words. This one organises your holes: mark a gap where the
+book needs something, navigate to it, and write with the instruction pinned
+above the cursor.
+
+**It stores nothing** — every number is read from the markdown at startup. There
+is no database and no second copy. Delete it and the book is untouched.
 
 Built on [Cobra](https://cobra.dev) for the command tree and
 [Charm](https://charm.land) — Bubble Tea, Lip Gloss, Bubbles, Glamour — for the

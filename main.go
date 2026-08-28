@@ -1,4 +1,6 @@
-// mama — a lens over the manuscript.
+// mama — manuscript manager.
+//
+// Navigate a book written in markdown, find what is missing, and write into it.
 //
 // It stores nothing. Every fact it shows is read from the markdown at startup;
 // there is no database and no second copy of the book. Delete this program and
@@ -20,11 +22,17 @@ import (
 
 func main() {
 	root := &cobra.Command{
-		Use:   "mama",
-		Short: "Navigate and write The Legacy of Yellow Mama",
-		Long: "mama is a lens over the manuscript. It reads the markdown, shows you\n" +
-			"where the book stands and what is still open, and gives you a place to\n" +
-			"write. It stores nothing of its own.",
+		Use:     "mama",
+		Version: "0.1.0",
+		Short:   "manuscript manager — navigate a book, find what is missing, write into it",
+		Long: "mama — manuscript manager.\n\n" +
+			"Reads a book written in markdown, shows you where it stands and what is\n" +
+			"still open, and gives you a place to write. Organised around what is\n" +
+			"missing rather than what is written: mark the gaps, navigate to them,\n" +
+			"and write with the instruction pinned above the cursor.\n\n" +
+			"It stores nothing of its own. Every number is read from the files at\n" +
+			"startup — no database, no second copy. Delete it and the book is\n" +
+			"untouched.",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			r, cs := load()
