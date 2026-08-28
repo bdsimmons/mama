@@ -39,6 +39,7 @@ const (
 	scWrite
 	scRead
 	scEdit
+	scSupport // supporting material for the selected chapter
 )
 
 type keymap struct {
@@ -47,6 +48,7 @@ type keymap struct {
 	write, read, editor, done key.Binding
 	search, showDone          key.Binding
 	gapList, newGap           key.Binding
+	support                   key.Binding
 	save, saveClose, discard  key.Binding
 }
 
@@ -66,6 +68,7 @@ var keys = keymap{
 	showDone:  key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "show done")),
 	gapList:   key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "list gaps")),
 	newGap:    key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "new gap")),
+	support:   key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sources")),
 	save:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "save")),
 	saveClose: key.NewBinding(key.WithKeys("ctrl+x"), key.WithHelp("ctrl-x", "save & close gap")),
 	discard:   key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl-c", "discard")),
@@ -77,6 +80,7 @@ type model struct {
 	tasks []Task
 	docs  []Doc
 	arts  []Artifact
+	media []Doc
 	lines map[string][]string
 	hits  []Hit
 
@@ -150,6 +154,85 @@ func newModel(root string, cs []Chapter) *model {
 	m.rend, _ = glamour.NewTermRenderer(styleOpt, glamour.WithWordWrap(cfg.Width))
 	m.rescan()
 	return m
+}
+
+// supportFor collects everything that backs a chapter: research and source
+// documents that declare or imply it, plus any media registered to the same
+// room in the manifest.
+func (m *model) supportFor(c Chapter) []Doc {
+	var out []Doc
+	for _, d := range m.docs {
+		for _, l := range d.Links {
+			if l == c.File || strings.HasSuffix(c.File, l) {
+				out = append(out, d)
+				break
+			}
+		}
+	}
+	room := chapterRoom(c.File)
+	if room != "" {
+		for _, a := range m.arts {
+			for _, r := range strings.Split(a.Room, ";") {
+				if strings.TrimSpace(r) == room {
+					out = append(out, Doc{
+						File: "archive/manifest.csv", Title: a.ID + "  " + a.Label,
+						Kind: "artifact:" + a.Medium, Artifact: a.ID,
+					})
+					break
+				}
+			}
+		}
+	}
+	return out
+}
+
+// chapterRoom maps a chapter file to its room number, if it has one. Chapters
+// 21-27 are rooms 1-7 in this book; the mapping lives in the room files, so we
+// read it off the leading digits rather than hardcoding a table.
+func chapterRoom(file string) string {
+	base := filepath.Base(file)
+	for _, d := range m2room {
+		if strings.HasPrefix(base, d.prefix) {
+			return d.room
+		}
+	}
+	return ""
+}
+
+var m2room = []struct{ prefix, room string }{
+	{"21-", "1"}, {"22-", "2"}, {"23-", "3"}, {"24-", "4"},
+	{"25-", "5"}, {"26-", "7"}, {"27-", "12"},
+}
+
+// researchList is the Research tab's contents: notes and sources first, then
+// the media files under archive/.
+func (m *model) researchList() []Doc {
+	out := append([]Doc{}, m.docs...)
+	return append(out, m.media...)
+}
+
+// readDoc renders any markdown file in the reader.
+func (m *model) readDoc(rel string) {
+	b, err := os.ReadFile(filepath.Join(m.root, rel))
+	if err != nil {
+		m.err = err.Error()
+		return
+	}
+	out, err := m.rend.Render(string(b))
+	if err != nil {
+		m.err = err.Error()
+		return
+	}
+	m.vp = viewport.New(min(m.cfg.Width, m.w-4), max(5, m.h-6))
+	m.vp.SetContent(out)
+	m.gapAnchor = nil
+	m.readCh = -1
+	m.screen = scRead
+}
+
+func (m *model) startSupport() {
+	m.screen = scSupport
+	m.sel[tResearch] = 0
 }
 
 // startEdit loads the whole chapter into an editor. No rendering on this path,
@@ -235,6 +318,7 @@ func (m *model) rescan() {
 	_, m.chaps = load()
 	m.tasks, m.docs, m.lines = scanAll(m.root, m.chaps)
 	m.arts = artifacts(m.root)
+	m.media = mediaDocs(m.root, m.arts)
 	if m.query != "" {
 		m.hits = search(m.lines, m.query)
 	}
@@ -472,3 +556,10 @@ type reloadMsg struct{}
 
 func min(a, b int) int { if a < b { return a }; return b }
 func max(a, b int) int { if a > b { return a }; return b }
+
+// openExternal hands a non-markdown file to the desktop.
+func openExternal(root, rel string) tea.Cmd {
+	c := exec.Command("xdg-open", rel)
+	c.Dir = root
+	return tea.ExecProcess(c, func(error) tea.Msg { return reloadMsg{} })
+}

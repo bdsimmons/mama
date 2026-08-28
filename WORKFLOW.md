@@ -117,6 +117,46 @@ None of these are required. A book with no `archive/` simply shows an empty tab.
 
 **Anywhere** — `/` search · `r` reload · `tab` next view · `q` quit
 
+## Supporting material
+
+A chapter is only as good as what backs it. Two things make that visible.
+
+**Declare it in the source file.** Near the top of any research note, source
+document or transcript:
+
+```
+supports: 21-michael-lindsey.md
+```
+
+Comma-separated for several. `mama link` writes the line for you:
+
+```bash
+mama link yellow-mama/rooms/01-lindsey.md lindsey
+```
+
+**Then ask what backs a chapter** — `s` from the chapter list, or:
+
+```bash
+mama sources lindsey
+```
+
+```
+Michael Lindsey
+  ✓ Room 1 — Michael Clarence Lindsey              research
+  ✓ AP — 26 May 1989 — execution of Michael Lindsey source
+  ~ EX-005  Conversation with Dad — LYM 6-15-24.m4a artifact:audio
+```
+
+**`✓` means declared; `~` means guessed** from a filename or from a shared room
+number in `archive/manifest.csv`. A guess is a suggestion. A declaration is a
+record, and it is the one that will still be right in a year.
+
+`enter` opens it: markdown renders in place, and a PDF, audio file or video is
+handed to the desktop.
+
+The **Research** tab lists everything — notes, sources, transcripts and the
+media under `archive/` — with what each one supports.
+
 ## Checking the prose
 
 Two commands, and neither one is a style guide.

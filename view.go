@@ -52,6 +52,8 @@ func trunc(s string, n int) string {
 
 func (m *model) View() string {
 	switch m.screen {
+	case scSupport:
+		return m.viewSupport()
 	case scEdit:
 		return m.viewEdit()
 	case scWrite:
@@ -105,7 +107,7 @@ func (m *model) View() string {
 		if m.screen == scGaps {
 			help = "enter write · x close gap · e editor · h back · q quit"
 		} else {
-			help = "enter edit · p preview · w write gap · G gaps · g new gap · e $EDITOR · q quit"
+			help = "enter edit · p preview · s sources · w write gap · g new gap · q quit"
 		}
 	} else if m.tab == tTasks {
 		help = "a show done · " + help
@@ -244,14 +246,24 @@ func (m *model) viewResearch(rows int) string {
 		}
 		link := ""
 		if len(d.Links) > 0 {
-			link = sAccent.Render(" → " + filepath.Base(d.Links[0]))
+			arrow := " ~ "
+			if d.Declared {
+				arrow = " → "
+			}
+			link = sAccent.Render(arrow + filepath.Base(d.Links[0]))
+			if len(d.Links) > 1 {
+				link += sDim.Render(fmt.Sprintf(" +%d", len(d.Links)-1))
+			}
 		}
 		tk := ""
 		if d.Tasks > 0 {
 			tk = sWarn.Render(fmt.Sprintf(" %d☐", d.Tasks))
 		}
-		row := fmt.Sprintf(" %-34.34s %s", trunc(d.Title, 34),
-			sDim.Render(fmt.Sprintf("%5dw", d.Words)))
+		size := fmt.Sprintf("%5dw", d.Words)
+		if d.Size > 0 {
+			size = fmt.Sprintf("%5s", humanSize(d.Size))
+		}
+		row := fmt.Sprintf(" %-34.34s %s", trunc(d.Title, 34), sDim.Render(size))
 		if i == m.sel[tResearch] {
 			b.WriteString(sAccent.Render(" ▸") + sSel.Render(row) + tk + link + "\n")
 		} else {
@@ -292,6 +304,43 @@ func (m *model) viewSearch(rows int) string {
 	return b.String()
 }
 
+func (m *model) viewSupport() string {
+	c := m.chaps[clampi(m.sel[tBook], len(m.chaps))]
+	sup := m.supportFor(c)
+	var b strings.Builder
+	b.WriteString("  " + sTitle.Render("Supporting "+c.Title) + "\n\n")
+	if len(sup) == 0 {
+		b.WriteString("  " + sDim.Render("nothing links to this chapter yet") + "\n\n")
+		b.WriteString("  " + sDim.Render("Add a line near the top of a research file:") + "\n")
+		b.WriteString("  " + sAccent.Render("supports: "+filepath.Base(c.File)) + "\n\n")
+		b.WriteString("  " + sHelp.Render("q back"))
+		return b.String()
+	}
+	for i, d := range sup {
+		mark := sDim.Render("~")
+		if d.Declared {
+			mark = sOK.Render("✓")
+		}
+		kind := d.Kind
+		extra := ""
+		if d.Size > 0 {
+			extra = sDim.Render("  " + humanSize(d.Size))
+		}
+		if d.Artifact != "" {
+			extra += sAccent.Render("  " + d.Artifact)
+		}
+		row := fmt.Sprintf(" %s %-40.40s %s%s", mark, trunc(d.Title, 40), sDim.Render(kind), extra)
+		if i == m.sel[tResearch] {
+			b.WriteString(sAccent.Render(" ▸") + sSel.Render(row) + "\n")
+		} else {
+			b.WriteString("  " + row + "\n")
+		}
+	}
+	b.WriteString("\n  " + sDim.Render("✓ declared with a supports: line · ~ guessed from the filename") + "\n")
+	b.WriteString("  " + sHelp.Render("enter open · j/k move · q back"))
+	return b.String()
+}
+
 func (m *model) viewEdit() string {
 	c := m.chaps[clampi(m.editCh, len(m.chaps))]
 	words := 0
@@ -318,6 +367,9 @@ func (m *model) viewEdit() string {
 }
 
 func (m *model) viewRead() string {
+	if m.readCh < 0 { // a research document, not a chapter
+		return m.vp.View() + "\n  " + sHelp.Render("↑/↓ scroll · q back")
+	}
 	c := m.chaps[clampi(m.readCh, len(m.chaps))]
 	var b strings.Builder
 	b.WriteString("  " + sTitle.Render(c.Title) + "  " +

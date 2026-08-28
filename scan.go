@@ -6,6 +6,7 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"encoding/csv"
 	"os"
 	"path/filepath"
@@ -23,15 +24,19 @@ type Task struct {
 
 type Artifact struct {
 	ID, Medium, Fragility, Label, Room, Digitized, Notes string
+	DigitizedPath string
 }
 
 type Doc struct {
-	File  string
-	Title string
-	Kind  string // research | source | note | transcript | reference
-	Words int
-	Tasks int
-	Links []string // chapter files this backs
+	File     string
+	Title    string
+	Kind     string // research | source | note | transcript | reference | media
+	Words    int
+	Tasks    int
+	Links    []string // chapter files this backs
+	Declared bool     // links came from a `supports:` line, not a filename guess
+	Size     int64    // for media
+	Artifact string   // manifest id, if this file is registered
 }
 
 type Hit struct {
@@ -41,7 +46,8 @@ type Hit struct {
 }
 
 var (
-	reTask  = regexp.MustCompile(`^\s*[-*]\s+\[( |x|X)\]\s+(.*)$`)
+	reSupports = regexp.MustCompile(`(?i)^\s*(?:supports|backs)\s*:\s*(.+)$`)
+	reTask     = regexp.MustCompile(`^\s*[-*]\s+\[( |x|X)\]\s+(.*)$`)
 	reBlock2 = regexp.MustCompile(`^>\s?`)
 	reMDH1  = regexp.MustCompile(`^#\s+(.*)$`)
 	reTok   = regexp.MustCompile(`[a-z]{4,}`)
@@ -130,6 +136,14 @@ func scanAll(root string, chaps []Chapter) ([]Task, []Doc, map[string][]string) 
 
 		d := Doc{File: rel, Kind: kindOf(rel)}
 		for i, l := range ls {
+			if m := reSupports.FindStringSubmatch(l); m != nil && i < 40 {
+				for _, x := range strings.Split(strings.Trim(m[1], "[]"), ",") {
+					if x = strings.TrimSpace(strings.Trim(strings.TrimSpace(x), `"`)); x != "" {
+						d.Links = append(d.Links, x)
+						d.Declared = true
+					}
+				}
+			}
 			if d.Title == "" {
 				if m := reMDH1.FindStringSubmatch(l); m != nil {
 					d.Title = strings.TrimSpace(reEmph.ReplaceAllString(m[1], ""))
@@ -152,12 +166,14 @@ func scanAll(root string, chaps []Chapter) ([]Task, []Doc, map[string][]string) 
 			d.Title = filepath.Base(rel)
 		}
 		if d.Kind != "" {
-			dt := tokens(filepath.Base(rel))
-			for cf, ct := range chapTok {
-				for t := range dt {
-					if ct[t] {
-						d.Links = append(d.Links, cf)
-						break
+			if !d.Declared {
+				dt := tokens(filepath.Base(rel))
+				for cf, ct := range chapTok {
+					for t := range dt {
+						if ct[t] {
+							d.Links = append(d.Links, cf)
+							break
+						}
 					}
 				}
 			}
@@ -196,7 +212,7 @@ func artifacts(root string) []Artifact {
 			ID: get(row, "id"), Medium: get(row, "medium"),
 			Fragility: get(row, "fragility"), Label: get(row, "label_or_description"),
 			Room: get(row, "room"), Digitized: get(row, "digitized"),
-			Notes: get(row, "notes"),
+			Notes: get(row, "notes"), DigitizedPath: get(row, "digitized_path"),
 		}
 		if a.ID != "" {
 			out = append(out, a)
@@ -253,4 +269,62 @@ func readLine(root, rel string, n int) string {
 		}
 	}
 	return ""
+}
+
+// mediaDocs lists the supporting files that are not markdown — PDFs, audio,
+// video, OCR text — so they can be browsed alongside the notes. A file matched
+// to a manifest row carries its id.
+func mediaDocs(root string, arts []Artifact) []Doc {
+	var out []Doc
+	exts := map[string]string{
+		".pdf": "pdf", ".m4a": "audio", ".mp3": "audio", ".wav": "audio",
+		".mp4": "video", ".mov": "video", ".eml": "email",
+		".srt": "transcript", ".vtt": "transcript", ".csv": "data",
+		".jpg": "image", ".jpeg": "image", ".png": "image", ".tif": "image",
+	}
+	filepath.Walk(filepath.Join(root, "archive"), func(p string, fi os.FileInfo, err error) error {
+		if err != nil || fi.IsDir() {
+			return nil
+		}
+		kind, ok := exts[strings.ToLower(filepath.Ext(p))]
+		if !ok {
+			return nil
+		}
+		rel, _ := filepath.Rel(root, p)
+		d := Doc{File: rel, Title: filepath.Base(p), Kind: "media:" + kind, Size: fi.Size()}
+		base := strings.ToLower(filepath.Base(p))
+		for _, a := range arts {
+			if a.DigitizedPath != "" && strings.EqualFold(filepath.Base(a.DigitizedPath), filepath.Base(p)) {
+				d.Artifact = a.ID
+				break
+			}
+			if a.Label != "" && strings.Contains(base, strings.ToLower(firstWord(a.Label))) {
+				d.Artifact = a.ID
+			}
+		}
+		out = append(out, d)
+		return nil
+	})
+	sort.Slice(out, func(i, j int) bool { return out[i].File < out[j].File })
+	return out
+}
+
+func firstWord(s string) string {
+	f := strings.Fields(s)
+	if len(f) == 0 {
+		return ""
+	}
+	return strings.Trim(f[0], `",.`)
+}
+
+func humanSize(n int64) string {
+	switch {
+	case n > 1<<30:
+		return fmt.Sprintf("%.1fG", float64(n)/(1<<30))
+	case n > 1<<20:
+		return fmt.Sprintf("%.0fM", float64(n)/(1<<20))
+	case n > 1<<10:
+		return fmt.Sprintf("%.0fK", float64(n)/(1<<10))
+	}
+	return fmt.Sprintf("%dB", n)
 }

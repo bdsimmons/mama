@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -81,3 +82,50 @@ func wrapAt(s string, w int, prefix string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// addSupports declares, in the source file itself, which chapter it backs.
+// The line lives near the top so it is visible when the file is opened, and it
+// is plain enough to edit by hand.
+func addSupports(root, rel, chapter string) error {
+	path := filepath.Join(root, rel)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(b), "\n")
+
+	for i, l := range lines {
+		if i > 40 {
+			break
+		}
+		if m := reSupportsLine.FindStringSubmatch(l); m != nil {
+			existing := strings.Split(strings.Trim(m[1], "[]"), ",")
+			for _, x := range existing {
+				if strings.TrimSpace(strings.Trim(strings.TrimSpace(x), `"`)) == chapter {
+					return nil // already declared
+				}
+			}
+			lines[i] = strings.TrimRight(l, " ") + ", " + chapter
+			return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+		}
+	}
+
+	// no line yet: put one after the H1, or at the top
+	at := 0
+	for i, l := range lines {
+		if strings.HasPrefix(l, "# ") {
+			at = i + 1
+			break
+		}
+		if i > 5 {
+			break
+		}
+	}
+	ins := []string{"", "supports: " + chapter}
+	out := append([]string{}, lines[:at]...)
+	out = append(out, ins...)
+	out = append(out, lines[at:]...)
+	return os.WriteFile(path, []byte(strings.Join(out, "\n")), 0o644)
+}
+
+var reSupportsLine = regexp.MustCompile(`(?i)^\s*(?:supports|backs)\s*:\s*(.+)$`)

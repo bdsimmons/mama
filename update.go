@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -40,6 +42,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch m.screen {
 		case scEdit:
 			return m.updateEdit(msg)
+		case scSupport:
+			return m.updateSupport(msg)
 		case scWrite:
 			return m.updateWrite(msg)
 		case scRead:
@@ -47,6 +51,32 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			return m.updateList(msg)
 		}
+	}
+	return m, nil
+}
+
+func (m *model) updateSupport(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	sup := m.supportFor(m.chaps[clampi(m.sel[tBook], len(m.chaps))])
+	switch msg.String() {
+	case "q", "esc", "h", "left", "s":
+		m.screen = scList
+		return m, nil
+	case "j", "down":
+		m.sel[tResearch] = clampi(m.sel[tResearch]+1, len(sup))
+		return m, nil
+	case "k", "up":
+		m.sel[tResearch] = clampi(m.sel[tResearch]-1, len(sup))
+		return m, nil
+	case "enter", "l", "right":
+		if len(sup) == 0 {
+			return m, nil
+		}
+		d := sup[clampi(m.sel[tResearch], len(sup))]
+		if strings.HasPrefix(d.Kind, "media:") || strings.HasPrefix(d.Kind, "artifact:") {
+			return m, openExternal(m.root, d.File)
+		}
+		m.readDoc(d.File)
+		return m, nil
 	}
 	return m, nil
 }
@@ -217,6 +247,12 @@ func (m *model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.newGap):
 		if m.tab == tBook && len(m.chaps) > 0 {
 			m.startNewGap()
+		}
+		return m, nil
+
+	case key.Matches(msg, keys.support):
+		if m.tab == tBook && len(m.chaps) > 0 {
+			m.startSupport()
 		}
 		return m, nil
 

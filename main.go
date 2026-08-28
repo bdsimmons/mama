@@ -364,8 +364,62 @@ func main() {
 		},
 	}
 
+	linkCmd := &cobra.Command{
+		Use:   "link <source-file> <chapter>",
+		Short: "Declare that a research file supports a chapter",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, cs := load()
+			c := match(cs, args[1])
+			if c == nil {
+				return fmt.Errorf("no chapter matching %q", args[1])
+			}
+			src := args[0]
+			if _, err := os.Stat(filepath.Join(r, src)); err != nil {
+				hits, _ := filepath.Glob(filepath.Join(r, "*", "**", "*"+src+"*"))
+				if len(hits) == 0 {
+					return fmt.Errorf("no file matching %q", src)
+				}
+				src, _ = filepath.Rel(r, hits[0])
+			}
+			if err := addSupports(r, src, filepath.Base(c.File)); err != nil {
+				return err
+			}
+			fmt.Printf("%s now supports %s\n", src, filepath.Base(c.File))
+			return nil
+		},
+	}
+
+	sourcesCmd := &cobra.Command{
+		Use:   "sources [chapter]",
+		Short: "What supports a chapter",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, cs := load()
+			m := newModel(r, cs)
+			for _, c := range cs {
+				if len(args) > 0 && !matches(c, args[0]) {
+					continue
+				}
+				sup := m.supportFor(c)
+				if len(sup) == 0 {
+					continue
+				}
+				fmt.Printf("\n%s\n", c.Title)
+				for _, d := range sup {
+					mark := "~"
+					if d.Declared {
+						mark = "✓"
+					}
+					fmt.Printf("  %s %-46.46s %s\n", mark, d.Title, d.Kind)
+				}
+			}
+			fmt.Println("\n✓ declared · ~ guessed from the filename")
+			return nil
+		},
+	}
+
 	root.AddCommand(status, gapsCmd, tasksCmd, findCmd, writeCmd, gotoCmd,
-		initCmd, newCmd, gapCmd, voiceCmd, lintCmd)
+		initCmd, newCmd, gapCmd, voiceCmd, lintCmd, linkCmd, sourcesCmd)
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
