@@ -221,7 +221,68 @@ func main() {
 		},
 	}
 
-	root.AddCommand(status, gapsCmd, tasksCmd, findCmd, writeCmd, gotoCmd)
+	var title, author, dir string
+	initCmd := &cobra.Command{
+		Use:   "init",
+		Short: "Start a new book",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, _ := os.Getwd()
+			if title == "" {
+				return fmt.Errorf("--title is required")
+			}
+			if dir == "" {
+				dir = slug(title)
+			}
+			if err := initBook(wd, dir, title, author); err != nil {
+				return err
+			}
+			fmt.Printf("Started %q in %s/\n\n", title, dir)
+			fmt.Println("  " + dir + "/chapters.txt    manuscript order")
+			fmt.Println("  " + dir + "/OUTLINE.md      per-chapter word budget")
+			fmt.Println("  " + dir + "/metadata.yaml   title and author")
+			fmt.Println("  .mama                        marks the repo root")
+			fmt.Println("\nNow:  mama            (the first chapter has a gap waiting)")
+			return nil
+		},
+	}
+	initCmd.Flags().StringVar(&title, "title", "", "book title (required)")
+	initCmd.Flags().StringVar(&author, "author", "", "author name")
+	initCmd.Flags().StringVar(&dir, "dir", "", "directory (defaults to a slug of the title)")
+
+	newCmd := &cobra.Command{
+		Use:   "new <title>",
+		Short: "Add a chapter",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, _ := load()
+			p, err := newChapter(r, strings.Join(args, " "))
+			if err != nil {
+				return err
+			}
+			fmt.Println("created", p)
+			return nil
+		},
+	}
+
+	gapCmd := &cobra.Command{
+		Use:   "gap <chapter> <instruction>",
+		Short: "Mark something the book still needs",
+		Args:  cobra.MinimumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, cs := load()
+			c := match(cs, args[0])
+			if c == nil {
+				return fmt.Errorf("no chapter matching %q", args[0])
+			}
+			if err := appendGap(r, c.File, strings.Join(args[1:], " ")); err != nil {
+				return err
+			}
+			fmt.Printf("gap added to %s\n", c.File)
+			return nil
+		},
+	}
+
+	root.AddCommand(status, gapsCmd, tasksCmd, findCmd, writeCmd, gotoCmd, initCmd, newCmd, gapCmd)
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}

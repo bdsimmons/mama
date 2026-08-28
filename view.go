@@ -55,7 +55,11 @@ func (m *model) View() string {
 	case scWrite:
 		return m.viewWrite()
 	case scRead:
-		return m.vp.View() + "\n" + sHelp.Render("  ↑/↓ scroll · q back")
+		return m.viewRead()
+	}
+
+	if m.gapPrompt {
+		return m.viewGapPrompt()
 	}
 
 	var b strings.Builder
@@ -99,7 +103,7 @@ func (m *model) View() string {
 		if m.screen == scGaps {
 			help = "enter write · x close gap · e editor · h back · q quit"
 		} else {
-			help = "enter gaps · w write · p read · e editor · tab views · q quit"
+			help = "enter read · w write · G gaps · g new gap · e editor · tab views · q quit"
 		}
 	} else if m.tab == tTasks {
 		help = "a show done · " + help
@@ -283,6 +287,42 @@ func (m *model) viewSearch(rows int) string {
 			b.WriteString("  " + row + "\n")
 		}
 	}
+	return b.String()
+}
+
+func (m *model) viewRead() string {
+	c := m.chaps[clampi(m.readCh, len(m.chaps))]
+	var b strings.Builder
+	b.WriteString("  " + sTitle.Render(c.Title) + "  " +
+		sDim.Render(fmt.Sprintf("%s of %s words", comma(c.Prose), comma(c.Target))) + "\n")
+	b.WriteString(m.vp.View() + "\n")
+
+	if len(c.Gaps) > 0 {
+		g := c.Gaps[clampi(m.gsel, len(c.Gaps))]
+		kind := sWarn.Render(g.Kind)
+		if g.Kind == "PLAN" {
+			kind = sAccent.Render(g.Kind)
+		}
+		b.WriteString("  " + kind + sDim.Render(fmt.Sprintf(" %d/%d  ", m.gsel+1, len(c.Gaps))) +
+			trunc(g.Text, m.w-20) + "\n")
+		b.WriteString("  " + sHelp.Render("n/N gaps · enter write here · x close it · g new gap · e editor · q back"))
+	} else {
+		b.WriteString("  " + sHelp.Render("no gaps · g new gap · e editor · ↑/↓ scroll · q back"))
+	}
+	if m.gapPrompt {
+		return m.viewGapPrompt()
+	}
+	return b.String()
+}
+
+func (m *model) viewGapPrompt() string {
+	c := m.chaps[clampi(m.sel[tBook], len(m.chaps))]
+	var b strings.Builder
+	b.WriteString("\n  " + sTitle.Render("New gap in ") + sTitle.Render(c.Title) + "\n\n")
+	b.WriteString("  " + sDim.Render("What does this part of the book still need?") + "\n")
+	b.WriteString("  " + sDim.Render("Write it as an instruction to yourself.") + "\n\n")
+	b.WriteString("  > **GAP — " + m.gapText + sAccent.Render("▏") + "\n\n")
+	b.WriteString("  " + sHelp.Render("enter add · esc cancel"))
 	return b.String()
 }
 

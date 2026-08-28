@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -44,6 +45,7 @@ type keymap struct {
 	tabNext, quit, reload     key.Binding
 	write, read, editor, done key.Binding
 	search, showDone          key.Binding
+	gapList, newGap           key.Binding
 	save, saveClose, discard  key.Binding
 }
 
@@ -61,6 +63,8 @@ var keys = keymap{
 	done:      key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "close gap")),
 	search:    key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 	showDone:  key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "show done")),
+	gapList:   key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "list gaps")),
+	newGap:    key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "new gap")),
 	save:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "save")),
 	saveClose: key.NewBinding(key.WithKeys("ctrl+x"), key.WithHelp("^x", "save & close gap")),
 	discard:   key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("^c", "discard")),
@@ -89,6 +93,14 @@ type model struct {
 	writeAt  int
 	writeCh  int
 	baseWord int
+
+	// reader: rendered chapter plus where its gaps landed in the render
+	readCh    int
+	gapAnchor []int // rendered line for each gap, same order as Chapter.Gaps
+
+	// new-gap prompt
+	gapPrompt bool
+	gapText   string
 
 	w, h int
 	err  string
@@ -166,6 +178,25 @@ func clampi(v, n int) int {
 	return v
 }
 
+// startNewGap opens the one-line prompt for a gap's instruction.
+func (m *model) startNewGap() {
+	m.gapPrompt, m.gapText = true, ""
+}
+
+func (m *model) commitNewGap() {
+	c := m.chaps[clampi(m.sel[tBook], len(m.chaps))]
+	if strings.TrimSpace(m.gapText) != "" {
+		if err := appendGap(m.root, c.File, m.gapText); err != nil {
+			m.err = err.Error()
+		}
+		m.rescan()
+	}
+	m.gapPrompt, m.gapText = false, ""
+	if m.screen == scRead {
+		m.startRead()
+	}
+}
+
 func (m *model) startWrite() {
 	c := m.chaps[m.sel[tBook]]
 	m.writeCh = m.sel[tBook]
@@ -197,18 +228,18 @@ func (m *model) saveWrite(closeGapToo bool) {
 	m.gsel = 0
 }
 
+// startRead renders the chapter and works out where each gap landed in the
+// rendered text, so n/N can walk them in place instead of in a separate list.
 func (m *model) startRead() {
-	c := m.chaps[m.sel[tBook]]
+	m.readCh = m.sel[tBook]
+	c := m.chaps[m.readCh]
 	b, err := os.ReadFile(filepath.Join(m.root, c.File))
 	if err != nil {
 		m.err = err.Error()
 		return
 	}
 	w := min(90, m.w-4)
-	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(w),
-	)
+	r, err := glamour.NewTermRenderer(glamour.WithAutoStyle(), glamour.WithWordWrap(w))
 	if err != nil {
 		m.err = err.Error()
 		return
@@ -218,9 +249,53 @@ func (m *model) startRead() {
 		m.err = err.Error()
 		return
 	}
-	m.vp = viewport.New(w, max(5, m.h-6))
+	rendered := strings.Split(out, "\n")
+
+	// anchor each gap by finding a distinctive run of its instruction text
+	m.gapAnchor = make([]int, len(c.Gaps))
+	from := 0
+	for i, g := range c.Gaps {
+		needle := gapNeedle(g.Text)
+		m.gapAnchor[i] = from
+		for j := from; j < len(rendered); j++ {
+			if needle != "" && strings.Contains(stripANSI(rendered[j]), needle) {
+				m.gapAnchor[i] = j
+				from = j + 1
+				break
+			}
+		}
+	}
+
+	m.vp = viewport.New(w, max(5, m.h-8))
 	m.vp.SetContent(out)
+	m.gsel = 0
 	m.screen = scRead
+	m.scrollToGap()
+}
+
+// gapNeedle picks a few words unlikely to survive rewrapping as one run, but
+// long enough to be unique in a chapter.
+func gapNeedle(s string) string {
+	f := strings.Fields(s)
+	if len(f) < 3 {
+		return strings.Join(f, " ")
+	}
+	if len(f) > 6 {
+		f = f[:6]
+	}
+	return strings.Join(f[:3], " ")
+}
+
+var reANSI = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+func stripANSI(s string) string { return reANSI.ReplaceAllString(s, "") }
+
+func (m *model) scrollToGap() {
+	if len(m.gapAnchor) == 0 {
+		return
+	}
+	i := clampi(m.gsel, len(m.gapAnchor))
+	m.vp.SetYOffset(max(0, m.gapAnchor[i]-3))
 }
 
 func (m *model) openEditor() tea.Cmd {

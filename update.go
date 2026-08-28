@@ -20,6 +20,23 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.gapPrompt {
+			switch msg.Type {
+			case tea.KeyEnter:
+				m.commitNewGap()
+			case tea.KeyEsc:
+				m.gapPrompt, m.gapText = false, ""
+			case tea.KeyBackspace:
+				if len(m.gapText) > 0 {
+					m.gapText = m.gapText[:len(m.gapText)-1]
+				}
+			case tea.KeyRunes:
+				m.gapText += string(msg.Runes)
+			case tea.KeySpace:
+				m.gapText += " "
+			}
+			return m, nil
+		}
 		switch m.screen {
 		case scWrite:
 			return m.updateWrite(msg)
@@ -51,9 +68,42 @@ func (m *model) updateWrite(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) updateRead(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	c := m.chaps[clampi(m.readCh, len(m.chaps))]
 	switch msg.String() {
-	case "q", "esc", "h":
+	case "q", "esc", "h", "left":
 		m.screen = scList
+		return m, nil
+	case "n", "tab":
+		if len(c.Gaps) > 0 {
+			m.gsel = (m.gsel + 1) % len(c.Gaps)
+			m.scrollToGap()
+		}
+		return m, nil
+	case "N", "shift+tab":
+		if len(c.Gaps) > 0 {
+			m.gsel = (m.gsel - 1 + len(c.Gaps)) % len(c.Gaps)
+			m.scrollToGap()
+		}
+		return m, nil
+	case "w", "enter":
+		if len(c.Gaps) > 0 {
+			m.sel[tBook] = m.readCh
+			m.startWrite()
+		}
+		return m, nil
+	case "x":
+		if m.gsel < len(c.Gaps) {
+			closeGap(m.root, c.File, c.Gaps[m.gsel].Line)
+			m.rescan()
+			m.startRead()
+		}
+		return m, nil
+	case "e":
+		m.sel[tBook] = m.readCh
+		return m, m.openEditor()
+	case "g":
+		m.sel[tBook] = m.readCh
+		m.startNewGap()
 		return m, nil
 	}
 	var cmd tea.Cmd
@@ -114,6 +164,18 @@ func (m *model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.read):
 		if m.tab == tBook && len(m.chaps) > 0 {
 			m.startRead()
+		}
+		return m, nil
+
+	case key.Matches(msg, keys.gapList):
+		if m.tab == tBook && len(m.chaps) > 0 && len(m.chaps[m.sel[tBook]].Gaps) > 0 {
+			m.screen, m.gsel = scGaps, 0
+		}
+		return m, nil
+
+	case key.Matches(msg, keys.newGap):
+		if m.tab == tBook && len(m.chaps) > 0 {
+			m.startNewGap()
 		}
 		return m, nil
 
@@ -185,13 +247,8 @@ func (m *model) move(d int) {
 
 func (m *model) enter() (tea.Model, tea.Cmd) {
 	if m.tab == tBook {
-		c := m.chaps[clampi(m.sel[tBook], len(m.chaps))]
 		if m.screen == scList {
-			if len(c.Gaps) > 0 {
-				m.screen, m.gsel = scGaps, 0
-			} else {
-				m.startRead()
-			}
+			m.startRead() // enter opens the chapter, not a list of its holes
 			return m, nil
 		}
 		m.startWrite()

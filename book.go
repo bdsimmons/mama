@@ -53,12 +53,14 @@ var (
 // works when launched from a menu or a bar widget, not only from inside a
 // checkout.
 func repoRoot() string {
+	// A repo is a book if it has a .mama marker, or any directory holding a
+	// chapters.txt. No project name is baked in.
 	looksRight := func(d string) bool {
-		if _, err := os.Stat(filepath.Join(d, "Makefile")); err != nil {
-			return false
+		if _, err := os.Stat(filepath.Join(d, ".mama")); err == nil {
+			return true
 		}
-		_, err := os.Stat(filepath.Join(d, "yellow-mama"))
-		return err == nil
+		hits, _ := filepath.Glob(filepath.Join(d, "*", "chapters.txt"))
+		return len(hits) > 0
 	}
 	climb := func(d string) (string, bool) {
 		for {
@@ -94,11 +96,35 @@ func repoRoot() string {
 	return wd
 }
 
+// bookDir is the directory holding the manuscript: whatever `.mama` names, or
+// the first directory containing a chapters.txt.
+func bookDir(root string) string {
+	if b, err := os.ReadFile(filepath.Join(root, ".mama")); err == nil {
+		for _, l := range strings.Split(string(b), "\n") {
+			l = strings.TrimSpace(l)
+			if strings.HasPrefix(l, "book") {
+				if _, v, ok := strings.Cut(l, "="); ok {
+					v = strings.Trim(strings.TrimSpace(v), `"`)
+					if v != "" {
+						return v
+					}
+				}
+			}
+		}
+	}
+	hits, _ := filepath.Glob(filepath.Join(root, "*", "chapters.txt"))
+	if len(hits) > 0 {
+		sort.Strings(hits)
+		return filepath.Base(filepath.Dir(hits[0]))
+	}
+	return "."
+}
+
 // budgets parses the per-chapter table in OUTLINE.md. If the table moves or
 // changes shape the tool degrades to target 0 rather than lying.
 func budgets(root string) map[int]int {
 	out := map[int]int{}
-	f, err := os.Open(filepath.Join(root, "yellow-mama", "OUTLINE.md"))
+	f, err := os.Open(filepath.Join(root, bookDir(root), "OUTLINE.md"))
 	if err != nil {
 		return out
 	}
@@ -128,12 +154,13 @@ func budgets(root string) map[int]int {
 
 func order(root string) []string {
 	var files []string
-	f, err := os.Open(filepath.Join(root, "yellow-mama", "chapters.txt"))
+	bd := bookDir(root)
+	f, err := os.Open(filepath.Join(root, bd, "chapters.txt"))
 	if err != nil {
-		g, _ := filepath.Glob(filepath.Join(root, "yellow-mama", "[0-9][0-9]-*.md"))
+		g, _ := filepath.Glob(filepath.Join(root, bd, "[0-9]*-*.md"))
 		sort.Strings(g)
 		for _, p := range g {
-			files = append(files, filepath.Join("yellow-mama", filepath.Base(p)))
+			files = append(files, filepath.Join(bd, filepath.Base(p)))
 		}
 		return files
 	}
@@ -152,7 +179,7 @@ func order(root string) []string {
 		if l == "" {
 			continue
 		}
-		files = append(files, filepath.Join("yellow-mama", l)+"\x00"+act)
+		files = append(files, filepath.Join(bd, l)+"\x00"+act)
 	}
 	return files
 }

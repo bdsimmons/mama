@@ -14,10 +14,16 @@ Built on [Cobra](https://cobra.dev) for the command tree and
 [Charm](https://charm.land) — Bubble Tea, Lip Gloss, Bubbles, Glamour — for the
 terminal UI.
 
+**New here?** Read [WORKFLOW.md](WORKFLOW.md) — how to start a book, mark gaps,
+and fill them.
+
 ## Commands
 
 ```
 mama                        the interactive view
+mama init --title "…"       start a new book
+mama new <title>            add a chapter
+mama gap <ch> <instruction> mark something the book still needs
 mama status [--json]        chapters, words against target, what is open
 mama gaps [--json]          every open GAP and PLAN, with file and line
 mama tasks                  every open "- [ ]" across the project
@@ -39,9 +45,10 @@ Five tabs — `tab` cycles, `1`–`5` jump.
 | **Research** | rooms, sources, notes and transcripts, linked to the chapters they back |
 | **Search** | `/` then type |
 
-On **Book**: `enter` opens the chapter's gaps, `enter` again opens the writing
-surface. `w` goes straight there. **`p` reads the chapter** rendered as markdown
-via Glamour. `e` hands off to `$EDITOR` at the right line. `x` closes a gap.
+On **Book**: `enter` **reads the chapter**, rendered as markdown via Glamour,
+with its gaps navigable in place — `n`/`N` steps between them, `enter` writes at
+the one you are on, `x` closes it, `g` adds a new one. `w` skips straight to
+writing; `G` lists the gaps flat; `e` hands off to `$EDITOR`.
 
 ## The writing surface
 
