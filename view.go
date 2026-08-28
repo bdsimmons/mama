@@ -313,7 +313,7 @@ func (m *model) viewEdit() string {
 		sDim.Render(fmt.Sprintf("  %s/%s", comma(words), comma(c.Target))) + "\n")
 	b.WriteString(m.ed.View() + "\n")
 	b.WriteString("  " + sHelp.Render(
-		"^s save · esc save & back · ^n/^p next gap · ^r preview · ^q back without saving"))
+		"ctrl-s save · esc save & back · ctrl-n/ctrl-p next gap · ctrl-r preview · ctrl-q discard"))
 	return b.String()
 }
 
@@ -386,6 +386,6 @@ func (m *model) viewWrite() string {
 		}
 	}
 	b.WriteString("\n" + m.ta.View() + "\n\n")
-	b.WriteString("  " + sHelp.Render("esc save · ^x save & close gap · ^c discard"))
+	b.WriteString("  " + sHelp.Render("esc save · ctrl-x save & close gap · ctrl-c discard"))
 	return b.String()
 }

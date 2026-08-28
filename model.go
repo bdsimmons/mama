@@ -67,8 +67,8 @@ var keys = keymap{
 	gapList:   key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "list gaps")),
 	newGap:    key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "new gap")),
 	save:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "save")),
-	saveClose: key.NewBinding(key.WithKeys("ctrl+x"), key.WithHelp("^x", "save & close gap")),
-	discard:   key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("^c", "discard")),
+	saveClose: key.NewBinding(key.WithKeys("ctrl+x"), key.WithHelp("ctrl-x", "save & close gap")),
+	discard:   key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl-c", "discard")),
 }
 
 type model struct {
