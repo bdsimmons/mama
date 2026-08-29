@@ -103,6 +103,16 @@ With none of those, it takes the first directory containing a `chapters.txt`.
 
 ## Install
 
+**A binary, no toolchain.** Static, nothing to install but the file:
+
+```bash
+# linux_amd64 · linux_arm64 · darwin_amd64 · darwin_arm64 · windows_amd64.exe
+curl -fsSL -o mama https://github.com/bdsimmons/mama/releases/latest/download/mama_linux_amd64
+chmod +x mama && mkdir -p ~/.local/bin && mv mama ~/.local/bin/
+```
+
+**With Go 1.26:**
+
 ```
 go install github.com/bdsimmons/mama@latest
 ```
@@ -114,7 +124,10 @@ git clone https://github.com/bdsimmons/mama
 cd mama && make install          # → ~/.local/bin/mama
 ```
 
-Needs Go 1.26. No other dependencies, no runtime, no config to create.
+No dependencies, no runtime, no config to create. Building from source needs
+Go 1.26; the released binaries need nothing.
+
+`make dist` cross-compiles all five platforms into `dist/` with checksums.
 
 ## Deliberately absent
 
