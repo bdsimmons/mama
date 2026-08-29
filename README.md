@@ -85,9 +85,10 @@ Anywhere in any markdown file: `> **GAP` / `> **PLAN` is an opening, `- [ ]` is 
 task, and **anything inside a `>` block is scaffolding** — excluded from prose
 counts, so progress measures writing rather than notes about writing.
 
-It finds the repo via `MAMA_ROOT`, then by climbing from the working directory,
-then by climbing from the binary — so it works when launched from a menu or a
-bar widget.
+It finds the repo via `--root`, then `MAMA_ROOT`, then by climbing from the
+working directory, then by climbing from the binary. A launcher that starts it
+detached can set neither an environment nor a working directory, which is what
+`--root` is for.
 
 ## Which book
 

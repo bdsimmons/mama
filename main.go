@@ -43,6 +43,8 @@ func main() {
 		},
 	}
 
+	root.PersistentFlags().StringVar(&rootFlag, "root", "",
+		"manuscript repo to work on (or set MAMA_ROOT)")
 	root.PersistentFlags().StringVar(&bookFlag, "book", "",
 		"book directory to work on (overrides .mama; or set MAMA_BOOK)")
 

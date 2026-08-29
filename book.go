@@ -52,7 +52,15 @@ var (
 // working directory, then walking up from the binary itself — so the program
 // works when launched from a menu or a bar widget, not only from inside a
 // checkout.
+// rootFlag is set by --root. A launcher that starts mama detached cannot set
+// environment variables or a working directory, so it needs a way to say where
+// the manuscript is on the command line.
+var rootFlag string
+
 func repoRoot() string {
+	if rootFlag != "" {
+		return rootFlag
+	}
 	// A repo is a book if it has a .mama marker, or any directory holding a
 	// chapters.txt. No project name is baked in.
 	looksRight := func(d string) bool {
