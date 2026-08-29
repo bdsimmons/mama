@@ -3,6 +3,7 @@ package main
 // Reading the book off disk. One pass, no caching, no writes.
 
 import (
+	"errors"
 	"bufio"
 	"os"
 	"path/filepath"
@@ -100,9 +101,23 @@ func repoRoot() string {
 			}
 		}
 	}
-	wd, _ := os.Getwd()
-	return wd
+	// Nothing found. Return empty rather than falling back to the working
+	// directory: that fallback silently walked whatever you happened to be
+	// standing in, so running mama from $HOME scanned the entire home
+	// directory instead of saying it could not find a book.
+	return ""
 }
+
+// errNoRepo is what every command except `init` reports when there is no
+// manuscript to work on.
+var errNoRepo = errors.New(
+	"no manuscript found here.\n\n" +
+		"mama looks for a .mama file, or a directory containing chapters.txt,\n" +
+		"in the working directory and its parents. Either:\n\n" +
+		"  cd into the repo\n" +
+		"  mama --root /path/to/repo …\n" +
+		"  MAMA_ROOT=/path/to/repo mama …\n" +
+		"  mama init --title \"…\"   to start a new book here")
 
 // bookDir is the directory holding the manuscript: whatever `.mama` names, or
 // the first directory containing a chapters.txt.

@@ -35,6 +35,18 @@ func main() {
 			"startup — no database, no second copy. Delete it and the book is\n" +
 			"untouched.",
 		SilenceUsage: true,
+		// Every command except the ones that create or describe things needs a
+		// manuscript. Check once, here, so no command has to guess.
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			switch cmd.Name() {
+			case "init", "completion", "help", "version":
+				return nil
+			}
+			if repoRoot() == "" {
+				return errNoRepo
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			r, cs := load()
 			p := tea.NewProgram(newModel(r, cs), tea.WithAltScreen())

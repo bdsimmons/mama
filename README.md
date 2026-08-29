@@ -120,3 +120,16 @@ Needs Go 1.26. No other dependencies, no runtime, no config to create.
 
 No note storage, no tagging, no sync, no config file, no database. To record
 something, write it in the file. The repo is the database.
+
+## When it cannot find a book
+
+Every command except `init` refuses to run rather than guessing:
+
+```
+$ cd ~ && mama status
+Error: no manuscript found here.
+```
+
+This matters once the binary is installed outside the manuscript. An earlier
+version fell back to the working directory, so running it from `$HOME` walked
+the entire home directory looking for markdown.
