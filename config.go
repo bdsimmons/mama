@@ -11,6 +11,10 @@ package main
 //	line_numbers  = true    # in the chapter editor
 //	style         = "auto"  # glamour: auto | dark | light | dracula | notty …
 //	tabs          = "book,tasks,archive,research,search"
+//
+//	[rooms]                 # chapter prefix -> manifest "room" column
+//	21- = "1"               # so archive material filed under room 1 shows up
+//	22- = "2"               # as support for chapter 21
 
 import (
 	"os"
@@ -26,12 +30,14 @@ type config struct {
 	LineNumbers  bool
 	Style        string
 	Tabs         []string
+	Rooms        map[string]string
 }
 
 func defaultConfig() config {
 	return config{
 		Width: 90, WritingWidth: 74, LineNumbers: true, Style: "auto",
-		Tabs: []string{"book", "tasks", "archive", "research", "search"},
+		Tabs:  []string{"book", "tasks", "archive", "research", "search"},
+		Rooms: map[string]string{},
 	}
 }
 
@@ -62,6 +68,12 @@ func loadConfig(root string) config {
 		v = strings.Trim(strings.TrimSpace(v), `"`)
 		if i := strings.Index(v, " #"); i > 0 {
 			v = strings.TrimSpace(v[:i])
+		}
+		if section == "rooms" {
+			if k != "" && v != "" {
+				c.Rooms[k] = v
+			}
+			continue
 		}
 		switch section + "." + k {
 		case ".book":

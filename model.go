@@ -169,7 +169,7 @@ func (m *model) supportFor(c Chapter) []Doc {
 			}
 		}
 	}
-	room := chapterRoom(c.File)
+	room := chapterRoom(m.root, c.File)
 	if room != "" {
 		for _, a := range m.arts {
 			for _, r := range strings.Split(a.Room, ";") {
@@ -186,22 +186,18 @@ func (m *model) supportFor(c Chapter) []Doc {
 	return out
 }
 
-// chapterRoom maps a chapter file to its room number, if it has one. Chapters
-// 21-27 are rooms 1-7 in this book; the mapping lives in the room files, so we
-// read it off the leading digits rather than hardcoding a table.
-func chapterRoom(file string) string {
+// chapterRoom maps a chapter file to a value in the manifest's "room" column,
+// so archive material filed under that room shows up as support for the
+// chapter. The mapping is per-project and lives in the [rooms] section of
+// .mama; with no such section, nothing is guessed this way.
+func chapterRoom(root, file string) string {
 	base := filepath.Base(file)
-	for _, d := range m2room {
-		if strings.HasPrefix(base, d.prefix) {
-			return d.room
+	for prefix, room := range loadConfig(root).Rooms {
+		if strings.HasPrefix(base, prefix) {
+			return room
 		}
 	}
 	return ""
-}
-
-var m2room = []struct{ prefix, room string }{
-	{"21-", "1"}, {"22-", "2"}, {"23-", "3"}, {"24-", "4"},
-	{"25-", "5"}, {"26-", "7"}, {"27-", "12"},
 }
 
 // researchList is the Research tab's contents: notes and sources first, then

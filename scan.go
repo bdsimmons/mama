@@ -99,14 +99,25 @@ func kindOf(rel string) string {
 	}
 }
 
+// stopTok are filing words. They describe the shape of a project rather than
+// its subject, so two files sharing one tell you nothing — matching on them
+// would suggest a research note supports a chapter when all they have in
+// common is the word "notes".
+var stopTok = map[string]bool{
+	"appendix": true, "archive": true, "chapter": true, "chapters": true,
+	"draft": true, "drafts": true, "final": true, "index": true,
+	"interview": true, "interviews": true, "note": true, "notes": true,
+	"outline": true, "part": true, "record": true, "records": true,
+	"research": true, "room": true, "rooms": true, "section": true,
+	"source": true, "sources": true, "transcript": true, "transcripts": true,
+	"untitled": true, "version": true,
+}
+
+// tokens reduces a filename to the words worth matching on.
 func tokens(s string) map[string]bool {
 	m := map[string]bool{}
 	for _, t := range reTok.FindAllString(strings.ToLower(s), -1) {
-		switch t {
-		case "record", "singleton", "sources", "notes", "yellow", "mama", "room", "rooms":
-			if t == "singleton" {
-				m[t] = true
-			}
+		if stopTok[t] {
 			continue
 		}
 		m[t] = true

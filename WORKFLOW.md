@@ -125,30 +125,30 @@ A chapter is only as good as what backs it. Two things make that visible.
 document or transcript:
 
 ```
-supports: 21-michael-lindsey.md
+supports: 04-the-strike.md
 ```
 
 Comma-separated for several. `mama link` writes the line for you:
 
 ```bash
-mama link research/01-lindsey.md lindsey
+mama link research/mill-closure.md strike
 ```
 
 **Then ask what backs a chapter** — `s` from the chapter list, or:
 
 ```bash
-mama sources lindsey
+mama sources strike
 ```
 
 ```
-Michael Lindsey
-  ✓ Room 1 — Michael Clarence Lindsey              research
-  ✓ AP — 26 May 1989 — execution of Michael Lindsey source
-  ~ EX-005  Conversation with Dad — LYM 6-15-24.m4a artifact:audio
+The Strike
+  ✓ The mill closure — what the minutes say          research
+  ✓ Gazette, 3 March 1974 — "Pickets at the gate"    source
+  ~ EX-012  Interview: shop steward                  artifact:audio
 ```
 
-**`✓` means declared; `~` means guessed** from a filename or from a shared room
-number in `archive/manifest.csv`. A guess is a suggestion. A declaration is a
+**`✓` means declared; `~` means guessed** from a filename or from a shared ID
+in `archive/manifest.csv`. A guess is a suggestion. A declaration is a
 record, and it is the one that will still be right in a year.
 
 `enter` opens it: markdown renders in place, and a PDF, audio file or video is
